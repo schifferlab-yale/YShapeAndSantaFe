@@ -19,10 +19,7 @@ BOTTOM=3
 im = cv2.imread(args.image[0])
 imWidth, imHeight, imChannels = im.shape
 
-cv2.imshow("window",cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
-blankImage=np.zeros((imHeight,imWidth,3), np.uint8)
-blankImage[:,:]=(255,0,0)
-cv2.imshow("pointsOnly",blankImage)
+
 
 
 
@@ -31,6 +28,12 @@ topRightIsland=[[533,17],[553,17],[544,24],[543,34]]
 bottomLeftIsland=[[14,534],[32,534],[23,538],[24,551]]
 bottomRightIsland=[[532,539],[552,539],[543,544],[542,555]]
 secondIsland=[[49,11],[67,13],[59,17],[63,29]];
+
+topLeft=[24,17]
+topRight=[543,24]
+bottomLeft=[23,538]
+bottomRight=[543,544]
+second=[59,17]
 
 def getAverageColor(im):
     avgColor=0;
@@ -45,8 +48,9 @@ avgColor=getAverageColor(im)
 def getColor(x,y):
     avg=0;
     count=0;
-    for i in range(x-3,x+3):
-        for j in range(y-3,y+3):
+    width=2;
+    for i in range(x-width,x+width):
+        for j in range(y-width,y+width):
             if x<0 or y<0 or x>imWidth or y>imHeight:
                 continue
             avg+=im[y][x][0]
@@ -63,14 +67,13 @@ def drawPoint(x,y,col=WHITE):
         col=WHITE
     else:
         col=BLACK
-    c=cv2.circle(im,(int(x),int(y)), 4, col, -1)
+    c=cv2.circle(,(int(x),int(y)), 4, col, -1)
     cv2.imshow("window",c)
     c=cv2.circle(blankImage,(int(x),int(y)), 4, col, -1)
     cv2.imshow("pointsOnly",c)
 
-for i in [topLeftIsland,topRightIsland,bottomLeftIsland,bottomRightIsland,secondIsland]:
-    for j in i:
-        drawPoint(j[0],j[1],(255,0,0))
+for i in [topLeft, topRight, bottomLeft, bottomRight, second]:
+    drawPoint(i[0],i[1],(255,0,0))
 
 
 def calcBestFit(points):
@@ -98,32 +101,52 @@ def dist(point1, point2):
     return math.sqrt(math.pow(point1[0] - point2[0], 2)+math.pow(point1[1] - point2[1], 2))
 
 def mouse_click(event, x, y,flags, param):
+    global topLeft, topRight, bottomLeft, bottomRight, second
+    if event == cv2.EVENT_MOUSEMOVE:
+        drawPoint(x,y)
     if event == cv2.EVENT_LBUTTONDOWN:
         print( str(x)+","+str(y))
         drawPoint(x,y,(255,0,0))
 
-        if(len(topLeftIsland)<4):
-            topLeftIsland.append([x,y])
-        elif(len(secondIsland)<4):
-            secondIsland.append([x,y])
-        elif(len(topRightIsland)<4):
-            topRightIsland.append((x,y))
-        elif(len(bottomLeftIsland)<4):
-            bottomLeftIsland.append((x,y))
-        elif(len(bottomRightIsland)<4):
-            bottomRightIsland.append((x,y))
+        if len(topLeft)==0:
+            topLeft=[x,y]
+        elif(topRight==[]):
+            topRight=[x,y]
+        elif(bottomLeft==[]):
+            bottomLeft=[x,y]
+        elif(bottomRight==[]):
+            bottomRight=[x,y]
+        elif(second==[]):
+            second=[x,y]
         else:
-            m, b =calcBestFit([topLeftIsland[CENTER], topRightIsland[CENTER], secondIsland[CENTER]])#Get the equation y=mx+b for the top row
 
-            islandHSpacing=dist(topLeftIsland[CENTER], secondIsland[CENTER])#Estimate the horizontal spacing using the distance between the centers of the first and second islands
-            islandHCount=round(dist(topLeftIsland[CENTER], topRightIsland[CENTER])/islandHSpacing)#Using the previous spacing estimation, determine the number of islands in the top row
-            islandHSpacing=round(dist(topLeftIsland[CENTER], topRightIsland[CENTER])/islandHCount)#Now that the number of islands is known, recalculate the spacing using the topleft and topright islands
-
+            print(1)
+            islandHSpacing=dist(topLeft, second)#Estimate the horizontal spacing using the distance between the centers of the first and second islands
+            islandHCount=round(dist(topLeft, topRight)/islandHSpacing)+1#Using the previous spacing estimation, determine the number of islands in the top row
+            islandHSpacing=round(dist(topLeft, topRight)/(islandHCount-1))#Now that the number of islands is known, recalculate the spacing using the topleft and topright islands
+            print(islandHCount)
             #islandTopLeftOffSet=[topLeftIsland[CENTER][0]-topLeftIsland[2]]
 
-            for i in range(islandHCount):
-                drawPoint(topLeftIsland[2][0]+i*islandHSpacing,m*(i*islandHSpacing)+b, (255,0,0))
+            m, b =calcBestFit([topLeft, second, topRight])#Get the equation y=mx+b for the top row
 
+            for i in range(islandHCount+1):
+                drawPoint(topLeft[0]+i*islandHSpacing,m*(i*islandHSpacing)+b, (255,0,0))
+
+
+
+class Draggable:
+    def __init__(self,x,y):
+        self.x=x;
+        self.y=y;
+
+
+def showScreen():
+    cv2.imshow("window",cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
+    blankImage=np.zeros((imHeight,imWidth,3), np.uint8)
+    blankImage[:,:]=(255,0,0)
+    cv2.imshow("pointsOnly",blankImage)
+
+showScreen();
 
 
 
