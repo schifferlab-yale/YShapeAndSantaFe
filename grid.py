@@ -24,6 +24,10 @@ class Grid:
         self.rows=rows;
         self.cols=cols;
         self.color=RED
+        self.parent=None
+        self.selectedRow=-1
+        self.selectedCol=-1
+        self.selected=False
 
         self.subgrids=[]
 
@@ -47,32 +51,97 @@ class Grid:
             for grid in self.subgrids:
                 grid.draw(im)
 
-    def getClosestPoint(self,x,y):
+        if self.selected or True:
+            cv2.circle(im,(int(self.getCenter()[0]),int(self.getCenter()[1])),20,BLACK,3)
+
+    def getBaseGrids(self):
         if(len(self.subgrids)==0):
-            minDist=10000;
-            x=0;
-            y=0
-            #for (y,row) in enumerate(self.grid):
-                #for point in row:############################
+            return [self]
+        else:
+            subgrids=[]
+            for grid in self.subgrids:
+                subgrids=subgrids+grid.getBaseGrids();
+
+        return subgrids
+    def getAllGrids(self):
+        subgrids=[]
+        for grid in self.subgrids:
+            subgrids=subgrids+grid.getAllGrids();
+        subgrids.append(self)
+        return subgrids
+
+    def splitPoint(self,x,y):
+        gridToSplit=None;
+        minDist=100000;
+        splitRow=0;
+        splitCol=0;
+        for grid in self.getBaseGrids():
+            for (rowIndex, row) in enumerate(grid.grid):
+                for(colIndex, point) in enumerate(row):
+                    distance=dist(point, [x,y])
+                    if distance<minDist:
+                        minDist= distance
+                        gridToSplit=grid
+                        splitRow=rowIndex
+                        splitCol=colIndex
+
+        gridToSplit.split(splitRow,splitCol)
+
+    def getCenter(self):
+        if(len(self.subgrids)==0):
+            centerX=(self.topLeft[0]+self.topRight[0]+self.bottomLeft[0]+self.bottomRight[0])/4
+            centerY=(self.topLeft[1]+self.topRight[1]+self.bottomLeft[1]+self.bottomRight[1])/4
+            return [centerX,centerY]
+        else:
+            return self.subgrids[0].bottomRight
+
+    def selectGrid(self,x,y):
+        selectedGrid=None;
+        minDist=100000;
+        for grid in self.getAllGrids():
+            grid.selected=False
+            distance=dist(grid.getCenter(), [x,y])
+            if(distance<minDist and len(grid.subgrids)==4 and len(grid.subgrids[0].subgrids)==0):
+                selectedGrid=grid
+        if(selectedGrid!=None):
+
+            selectedGrid.selected=True
+
+
+
+    def setCenter(self,x,y):
+        grids=self.subgrids
+        subgrids[0].bottomLeft=[x,y]
+        subgrids[1].bottomRight=[x,y]
+
+
+
 
 
     def split(self,row,col):
         #topLeft, topRight, bottomLeft, bottomRight
-        grid1=Grid(self.topLeft, self.grid[0][col], self.grid[row][0],self.grid[row][col], row+1, col+1)
-        grid2=Grid(self.grid[0][col], self.grid[0][self.cols-1], self.grid[row][col], self.grid[row][self.cols-1], row+1, self.cols-row)
-        grid3=Grid(self.grid[row][0],self.grid[row][col],self.grid[self.rows-1][0],self.grid[self.rows-1][col],self.rows-col,col+1)
-        grid4=Grid(self.grid[row][col], self.grid[row][self.cols-1],self.grid[self.rows-1][col],self.grid[self.rows-1][self.cols-1],self.rows-col,self.cols-row)
+        grid1=Grid(self.topLeft, self.grid[0][col], self.grid[row][0],self.grid[row][col],  row+1, col+1)
+        grid2=Grid(self.grid[0][col], self.grid[0][self.cols-1], self.grid[row][col], self.grid[row][self.cols-1], row+1, self.cols-col)
+        grid3=Grid(self.grid[row][0],self.grid[row][col],self.grid[self.rows-1][0],self.grid[self.rows-1][col], self.rows-row, col+1)
+        grid4=Grid(self.grid[row][col], self.grid[row][self.cols-1],self.grid[self.rows-1][col],self.grid[self.rows-1][self.cols-1],self.rows-row,self.cols-col)
 
+        grids=[grid1,grid2,grid3,grid4]
 
-        self.subgrids=[grid1,grid2,grid3,grid4]
-        for grid in self.subgrids:
+        grids= [grid for grid in grids if grid.rows != 1 and grid.cols!=1]
+        if(len(grids)<4):
+            return;
+
+        for grid in grids:
             grid.color=(randint(0,255),randint(0,255),randint(0,255),randint(0,255))
+            grid.parent=self;
+
+        self.subgrids=grids
+
 
 
 
 g=Grid([10,10],[900,30],[40,900],[600,600],20,15)
-g.split(9,9)
-g.subgrids[0].split(3,3)
+print(g.getBaseGrids())
 
 def show():
     imWidth=1000;
@@ -87,6 +156,12 @@ def show():
     cv2.imshow("window",outputImage)
 
 def mouse_event(event, x, y,flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        g.splitPoint(x,y)
+        print(len(g.getBaseGrids()))
+    if event == cv2.EVENT_RBUTTONDOWN:
+        g.selectGrid(x,y)
+
     show()
 
 show();
