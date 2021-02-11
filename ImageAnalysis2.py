@@ -55,10 +55,16 @@ hasUpdate=True;
 
 
 class Node():
-    def __init__(self, x,y, isBlack):
+    def __init__(self, x,y, isBlack=None):
         self.x=x
         self.y=y
         self.isBlack=isBlack
+class YIsland():
+    def __init__(self, x, y, armLength,angle):
+        self.x=x;
+        self.y=y;
+        self.topLeft=Node(x,y)
+
 
 
 
