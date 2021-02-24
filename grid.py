@@ -6,6 +6,13 @@ from random import randint
 
 
 
+try:
+    image = cv2.imread("squareLattice.jpeg")
+    image = cv2.resize(image, (1000,1000))
+except:
+    raise Exception("File not found")
+
+
 WHITE=(255,255,255)
 BLACK=(0,0,0)
 BLUE=(255,0,0)
@@ -32,6 +39,16 @@ class Grid:
         self.subgrids=[]
 
         self.grid=[];
+        self.calcGrid()
+
+    def calcGrid(self):
+        self.grid=[]
+        topLeft=self.topLeft
+        topRight=self.topRight
+        bottomLeft=self.bottomLeft
+        bottomRight=self.bottomRight
+        rows=self.rows
+        cols=self.cols
         hSpacing=dist(topLeft,topRight)/cols;
         for (rowStartX, rowStartY, rowEndX, rowEndY) in zip(np.linspace(topLeft[0], bottomLeft[0],rows), np.linspace(topLeft[1], bottomLeft[1], rows), np.linspace(topRight[0],bottomRight[0],rows), np.linspace(topRight[1],bottomRight[1],rows)):
             self.grid.append([])
@@ -40,19 +57,27 @@ class Grid:
 
     def draw(self,im):
         if(len(self.subgrids)==0):
-            im=cv2.line(im, (int(self.topLeft[0]),int(self.topLeft[1])), (int(self.topRight[0]),int(self.topRight[1])), BLACK, 2)
-            im=cv2.line(im, (int(self.topLeft[0]),int(self.topLeft[1])), (int(self.bottomLeft[0]),int(self.bottomLeft[1])), BLACK, 2)
-            im=cv2.line(im, (int(self.bottomRight[0]),int(self.bottomRight[1])), (int(self.topRight[0]),int(self.topRight[1])), BLACK, 2)
-            im=cv2.line(im, (int(self.bottomRight[0]),int(self.bottomRight[1])), (int(self.bottomLeft[0]),int(self.bottomLeft[1])), BLACK, 2)
+            im=cv2.line(im, (int(self.topLeft[0]),int(self.topLeft[1])), (int(self.topRight[0]),int(self.topRight[1])), RED, 2)
+            im=cv2.line(im, (int(self.topLeft[0]),int(self.topLeft[1])), (int(self.bottomLeft[0]),int(self.bottomLeft[1])), RED, 2)
+            im=cv2.line(im, (int(self.bottomRight[0]),int(self.bottomRight[1])), (int(self.topRight[0]),int(self.topRight[1])), RED, 2)
+            im=cv2.line(im, (int(self.bottomRight[0]),int(self.bottomRight[1])), (int(self.bottomLeft[0]),int(self.bottomLeft[1])), RED, 2)
+            #for row in self.grid:
+                #for point in row:
+                    #im=cv2.circle(im,(int(point[0]),int(point[1])),5,self.color,-1)
+
             for row in self.grid:
-                for point in row:
-                    im=cv2.circle(im,(int(point[0]),int(point[1])),5,self.color,-1)
+                im=cv2.line(im,(int(row[0][0]),int(row[0][1])),(int(row[len(row)-1][0]),int(row[len(row)-1][1])),RED,1)
+            for i in range(len(self.grid[0])):
+                im=cv2.line(im, (int(self.grid[0][i][0]),int(self.grid[0][i][1])), (int(self.grid[len(self.grid)-1][i][0]),int(self.grid[len(self.grid)-1][i][1])), RED, 1)
+
         else:
             for grid in self.subgrids:
                 grid.draw(im)
 
-        if self.selected or True:
-            cv2.circle(im,(int(self.getCenter()[0]),int(self.getCenter()[1])),20,BLACK,3)
+        #if self.selected:
+        #    cv2.circle(im,(int(self.getCenter()[0]),int(self.getCenter()[1])),20,BLACK,3)
+        #else:
+        #    cv2.circle(im,(int(self.getCenter()[0]),int(self.getCenter()[1])),20,RED,3)
 
     def getBaseGrids(self):
         if(len(self.subgrids)==0):
@@ -103,17 +128,62 @@ class Grid:
             distance=dist(grid.getCenter(), [x,y])
             if(distance<minDist and len(grid.subgrids)==4 and len(grid.subgrids[0].subgrids)==0):
                 selectedGrid=grid
+                minDist=distance
         if(selectedGrid!=None):
-
             selectedGrid.selected=True
 
+    def getSelectedGrid(self):
+        for grid in self.getAllGrids():
+            if grid.selected==True:
+                return grid
 
+    def deselectAll(self):
+        for grid in self.getAllGrids():
+            grid.selected=False;
+
+    def setTopLeft(self,x,y):
+        self.topLeft=[x,y]
+        if(len(self.subgrids)>0):
+            self.subgrids[0].setTopLeft(x,y)
+        self.calcGrid()
+    def setTopRight(self,x,y):
+        self.topRight=[x,y]
+        if(len(self.subgrids)>0):
+            self.subgrids[1].setTopRight(x,y)
+        self.calcGrid()
+    def setBottomLeft(self,x,y):
+        self.bottomLeft=[x,y]
+        if(len(self.subgrids)>0):
+            self.subgrids[2].setBottomLeft(x,y)
+        self.calcGrid()
+    def setBottomRight(self,x,y):
+        self.bottomRight=[x,y]
+        if(len(self.subgrids)>0):
+
+            self.subgrids[3].setBottomRight(x,y)
+        self.calcGrid()
 
     def setCenter(self,x,y):
         grids=self.subgrids
-        subgrids[0].bottomLeft=[x,y]
-        subgrids[1].bottomRight=[x,y]
+        grids[0].setBottomRight(x,y)
+        grids[1].setBottomLeft(x,y)
+        grids[2].setTopRight(x,y)
+        grids[3].setTopLeft(x,y)
+        for grid in grids:
+            grid.calcGrid()
 
+    def getCorners(self):
+        return [self.topLeft, self.topRight, self.bottomLeft, self.bottomRight]
+
+    def setCornerByIndex(self,index,x,y):
+        if index==0:
+            self.setTopLeft(x,y)
+        elif index==1:
+            self.setTopRight(x,y)
+        elif index==2:
+            self.setBottomLeft(x,y)
+        elif index==3:
+            self.setBottomRight(x,y)
 
 
 
@@ -140,27 +210,44 @@ class Grid:
 
 
 
-g=Grid([10,10],[900,30],[40,900],[600,600],20,15)
+g=Grid([10,10],[900,30],[40,900],[600,600],25,25)
 print(g.getBaseGrids())
 
 def show():
     imWidth=1000;
     imHeight=1000;
-    outputImage=np.zeros((imHeight,imWidth,3), np.uint8)
-    outputImage[:,:]=(255,255,255)
+    #outputImage=np.zeros((imHeight,imWidth,3), np.uint8)
+    #outputImage[:,:]=(255,255,255)
+    outputImage=image.copy()
 
     g.draw(outputImage)
 
 
 
     cv2.imshow("window",outputImage)
-
+dragging=False
+adjustingCorner=-1
 def mouse_event(event, x, y,flags, param):
+    global dragging, adjustingCorner
     if event == cv2.EVENT_LBUTTONDOWN:
+        for (i, corner) in enumerate(g.getCorners()):
+            if(dist(corner,[x,y])<10):
+                adjustingCorner=i
+        if(adjustingCorner==-1):
+            g.selectGrid(x,y)
+            dragging=True
+    elif event==cv2.EVENT_MOUSEMOVE:
+        if(adjustingCorner>=0):
+            g.setCornerByIndex(adjustingCorner,x,y)
+            g.calcGrid()
+        elif(dragging):
+            g.getSelectedGrid().setCenter(x,y)
+    elif event==cv2.EVENT_LBUTTONUP:
+        g.deselectAll()
+        dragging=False
+        adjustingCorner=-1;
+    elif event == cv2.EVENT_RBUTTONDOWN:
         g.splitPoint(x,y)
-        print(len(g.getBaseGrids()))
-    if event == cv2.EVENT_RBUTTONDOWN:
-        g.selectGrid(x,y)
 
     show()
 
