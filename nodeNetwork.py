@@ -15,6 +15,7 @@ except:
 
 WHITE=(255,255,255)
 BLACK=(0,0,0)
+GREEN=(0,255,0)
 BLUE=(255,0,0)
 RED=(0,0,255)
 
@@ -28,6 +29,7 @@ def sampleImageColor(im,x,y):
         return 1
     else:
         return -1
+
 
 class Node:
     def __init__(self,x,y):
@@ -122,18 +124,26 @@ class NodeNetwork:
                 for (startX,startY,endX,endY) in zip(np.linspace(topLeftCoord[0],bottomLeftCoord[0],rows+1), np.linspace(topLeftCoord[1],bottomLeftCoord[1],rows+1), np.linspace(topRightCoord[0],bottomRightCoord[0],rows+1), np.linspace(topRightCoord[1],bottomRightCoord[1],rows+1)):
                     im=cv2.line(im,(int(startX),int(startY)),(int(endX),int(endY)),RED,1)
 
-        for (rowI, row) in enumerate(self.getSamplePoints()):
-            for (vertexI, vertex) in enumerate(row):
-                for (pointI, point) in enumerate(vertex):
-                    #Draw Point
-                    if(point[2]==1):
-                        im=cv2.circle(im,(int(point[0]),int(point[1])),1,RED,-1)
-                    else:
-                        im=cv2.circle(im,(int(point[0]),int(point[1])),1,BLUE,-1)
+        if not self.dragging:
+            samplePoints=self.getSamplePoints()
+            for (rowI, row) in enumerate(samplePoints):
+                for (vertexI, vertex) in enumerate(row):
+                    for (pointI, point) in enumerate(vertex):
+                        #Draw Point
+                        if(point[2]==1):
+                            im=cv2.circle(im,(int(point[0]),int(point[1])),2,RED,-1)
+                        else:
+                            im=cv2.circle(im,(int(point[0]),int(point[1])),2,BLUE,-1)
 
-                    #Check for errors:
-                    if vertexI<len(row)-1:
-                        pass
+                        #Check for errors:
+
+                    #if we are not in the last column
+                    if vertexI < len(row)-1:
+                        if(vertex[2][2] == row[vertexI+1][1][2]):
+                            im=cv2.circle(im,(int(vertex[2][0]),int(vertex[2][1])),5,GREEN,2)
+                    if rowI < len(samplePoints)-1:
+                        if(vertex[3][2] == samplePoints[rowI+1][vertexI][0][2]):
+                            im=cv2.circle(im,(int(vertex[3][0]),int(vertex[3][1])),5,GREEN,2)
 
 
     def getGrid(self):
@@ -291,12 +301,93 @@ class NodeNetwork:
             self.selectedPoint["node"].x=x;
             self.selectedPoint["node"].y=y
 
+    def drawData(self, im):
+        if not self.dragging:
+            samplePoints=self.getSamplePoints()
+
+            height, width, channels = im.shape
+
+            margin=50
+            vertexVSpacing=(height-2*margin)/(len(samplePoints)-1)
+            vertexHSpacing=(width-2*margin)/(len(samplePoints[0])-1)
+
+            spacing=min(vertexVSpacing, vertexHSpacing)
+            vertexVSpacing=spacing
+            vertexHSpacing=spacing
+
+            islandSpacing=(vertexVSpacing+vertexHSpacing)/6
+            for (rowI, row) in enumerate(samplePoints):
+                for (vertexI, vertex) in enumerate(row):
+                    vertexX=int(margin+vertexI*vertexHSpacing)
+                    vertexY=int(margin+rowI*vertexVSpacing)
+                    for (pointI, point) in enumerate(vertex):
+
+                        if(point[2]==1):
+                            color=WHITE
+                        else:
+                            color=BLACK
+
+                        if(pointI==0):
+                            x=vertexX
+                            y=vertexY-islandSpacing
+                        elif(pointI==1):
+                            x=vertexX-islandSpacing
+                            y=vertexY
+                        elif(pointI==2):
+                            x=vertexX+islandSpacing
+                            y=vertexY
+                        elif(pointI==3):
+                            x=vertexX
+                            y=vertexY+islandSpacing
+
+                        if(rowI==0 and pointI==0):
+                            #im=cv2.circle(im,(int(point[0]),int(point[1])),4,color,-1)
+                            pass
+                        elif(vertexI == len(row)-1 and pointI==2):
+                            #im=cv2.circle(im,(int(point[0]),int(point[1])),4,color,-1)
+                            pass
+                        elif(vertexI ==0 and pointI==1):
+                            #im=cv2.circle(im,(int(point[0]),int(point[1])),4,color,-1)
+                            pass
+                        elif(rowI==len(samplePoints)-1 and pointI==3):
+                            #im=cv2.circle(im,(int(point[0]),int(point[1])),4,color,-1)
+                            pass
+
+                        elif(pointI==2 or pointI==3):
+                            if(pointI==2):
+                                otherPoint=row[vertexI+1][1]
+                                otherX=x+vertexHSpacing-2*islandSpacing
+                                otherY=y
+                            else:
+                                otherPoint=samplePoints[rowI+1][vertexI][0]
+                                otherX=x
+                                otherY=y+vertexVSpacing-2*islandSpacing
+
+                            if(otherPoint[2]==1):
+                                otherColor=WHITE
+                            else:
+                                otherColor=BLACK
+
+                            im=cv2.line(im, (int(x),int(y)), (int(otherX),int(otherY)), BLACK, 2)
+
+                            ##midPoint=[(point[0]+otherPoint[0])/2, (point[1]+otherPoint[1])/2]
+                            ##im=cv2.line(im, (int(point[0]),int(point[1])), (int(midPoint[0])-1, int(midPoint[1])), color, 3)
+                            ##im=cv2.line(im, (int(midPoint[0]), int(midPoint[1])), (int(otherPoint[0])+1,int(otherPoint[1])),  otherColor, 3)"""
+                        im=cv2.circle(im,(int(x),int(y)),3,color,-1)
+    def dataAsString(self):
+        string=""
+        for (rowI, row) in enumerate(self.getSamplePoints()):
+            for (vertexI, vertex) in enumerate(row):
+                for (pointI, point) in enumerate(vertex):
+                    string+=str(point[2])+", "
+                string+="\t"
+            string+="\n"
+        return string
 
 
 
 
-
-n=NodeNetwork(Node(10,10),Node(80,10),Node(30,30),Node(70,70),5,5)
+n=NodeNetwork(Node(10,10),Node(800,10),Node(30,800),Node(700,700),40,35)
 
 
 
@@ -304,14 +395,19 @@ n=NodeNetwork(Node(10,10),Node(80,10),Node(30,30),Node(70,70),5,5)
 def show():
     imWidth=1000;
     imHeight=1000;
-    outputImage=np.zeros((imHeight,imWidth,3), np.uint8)
-    outputImage[:,:]=(255,255,255)
+
     outputImage=image.copy()
     n.draw(outputImage)
-
-
-
     cv2.imshow("window",outputImage)
+
+    outputImage=np.zeros((imHeight,imWidth,3), np.uint8)
+    outputImage[:,:]=(127,127,127)
+    n.drawData(outputImage)
+    cv2.imshow("output",outputImage)
+
+
+
+
 
 
 def mouse_event(event, x, y,flags, param):
@@ -332,5 +428,13 @@ def mouse_event(event, x, y,flags, param):
 show();
 cv2.setMouseCallback('window', mouse_event)
 cv2.waitKey(0)
+
+with open('output.csv', 'w') as file:
+    file.write(n.dataAsString())
+
+outputImage=np.zeros((1000,1000,3), np.uint8)
+outputImage[:,:]=(127,127,127)
+n.drawData(outputImage)
+cv2.imwrite("output.jpg", np.float32(outputImage));
 
 cv2.destroyAllWindows()
