@@ -1,6 +1,22 @@
 import cv2
-import numpy as np
+import matplotlib.pyplot as plt
 import math
+import numpy as np
+from random import randint
+import argparse
+
+#Set up argparser to allow for input image
+parser = argparse.ArgumentParser(description='MFM image analysis')
+parser.add_argument('image', metavar='image', type=str, nargs='+',help='Path of image')
+parser.add_argument('-r', "--rows", metavar='r', help="number of rows", type=int, default=10)
+parser.add_argument('-c', "--columns", metavar='c', help="number of columns", type=int, default=10)
+args=parser.parse_args()
+
+try:
+    image = cv2.imread(args.image[0])
+    image = cv2.resize(image, (1000,1000))
+except:
+    raise Exception("File not found")
 
 #constants
 WHITE=(255,255,255)
@@ -20,7 +36,34 @@ def getIntermediate(point1,point2,percent):
 #Gets the color of an area on the screen at (x,y)
 #It will look at every pixel within a certain with of the specified point and then
 #average their values
+def sampleImageColor(im,x,y):
+    avg=0;
+    count=0;#number of pixels checked
+    width=2;#distance away from center pixel to sample
+    x=int(x)
+    y=int(y)
 
+    imWidth, imHeight, channels=im.shape
+
+    #loop through rows and columns
+    for i in range(x-width,x+width):
+        for j in range(y-width,y+width):
+            #make sure pixel is not offscreen
+            if i<0 or j<0 or i>imWidth-1 or j>imHeight-1:
+                continue
+            #add to average
+            avg+=im[j][i][0]#(im[j][i][0]+im[j][i][1]+im[j][i][2])/3
+            count+=1
+
+    #prevent divide by 0 error
+    if count==0:
+        return 0
+
+    #return avg color
+    avg/=count;
+    if(avg>127):
+        return 1
+    return -1
 
 #Basic class to hold an x and y value
 class Node:
@@ -43,9 +86,7 @@ def xyArrayToIntTuple(arr):
 
 #main class
 class NodeNetwork:
-    def __init__(self,topLeft,topRight,bottomLeft,bottomRight,rows, cols, image):
-        self.image=image;
-
+    def __init__(self,topLeft,topRight,bottomLeft,bottomRight,rows, cols):
         #number of rows and columns
         self.rows=rows;
         self.cols=cols;
@@ -72,8 +113,6 @@ class NodeNetwork:
         self.fixedRows=[0,rows-1]
         self.fixedCols=[0,cols-1]
 
-        #how far around the pixel to look
-        self.pointSampleWidth=2
 
 
     def draw(self,im):
@@ -130,12 +169,16 @@ class NodeNetwork:
                             im=cv2.circle(im,(int(point[0]),int(point[1])),2,BLUE,-1)
 
                         #Check for errors:
-                        if(self.hasError(samplePoints,rowI,vertexI,pointI)):
-                            im=cv2.circle(im,(int(point[0]),int(point[1])),5,GREEN,2)
 
-
-    def hasError(self, samplePoints, rowI, vertexI, pointI):
-        raise Exception("You need to define this function")
+                    #ERROR DETECTION
+                    #if we are not in the last column, make sure the right point is opposite color than the one next to it
+                    if vertexI < len(row)-1:
+                        if(vertex[2][2] == row[vertexI+1][1][2]):
+                            im=cv2.circle(im,(int(vertex[2][0]),int(vertex[2][1])),5,GREEN,2)
+                    #if we are not in the last row, make sure bottom ponit is the opposite color than the one below it
+                    if rowI < len(samplePoints)-1:
+                        if(vertex[3][2] == samplePoints[rowI+1][vertexI][0][2]):
+                            im=cv2.circle(im,(int(vertex[3][0]),int(vertex[3][1])),5,GREEN,2)
 
     #generates the grid based on the subgrids
     def getGrid(self):
@@ -179,40 +222,11 @@ class NodeNetwork:
                         grid[point["row"]+rowI][point["col"]+colI]=[pointX,pointY]
         return grid
 
-    def sampleImageColor(self,im,x,y):
-        avg=0;
-        count=0;#number of pixels checked
-        width=self.pointSampleWidth;#distance away from center pixel to sample
-        x=int(x)
-        y=int(y)
-
-        imWidth, imHeight, channels=im.shape
-
-        #loop through rows and columns
-        for i in range(x-width,x+width):
-            for j in range(y-width,y+width):
-                #make sure pixel is not offscreen
-                if i<0 or j<0 or i>imWidth-1 or j>imHeight-1:
-                    continue
-                #add to average
-                avg+=im[j][i][0]#(im[j][i][0]+im[j][i][1]+im[j][i][2])/3
-                count+=1
-
-        #prevent divide by 0 error
-        if count==0:
-            return 0
-
-        #return avg color
-        avg/=count;
-        if(avg>127):
-            return 1
-        return -1
 
     #get sample points as [row][vertex][island] which is an array [x,y,color]
     def getSamplePoints(self):
-        image=self.image
-
-
+        #multiplier for how far the sample points are from the edge of the square
+        shiftConstant=0.25
         grid=self.getGrid()
         samplePoints=[]
         for (rowI, row) in enumerate(grid[:-1]):
@@ -225,16 +239,29 @@ class NodeNetwork:
                 bottomLeft=grid[rowI+1][pointI]
                 bottomRight=grid[rowI+1][pointI+1]
 
-                squareSamplePoints=self.getSamplePointsFromSquare(topLeft,topRight,bottomLeft,bottomRight, row=rowI)
+                #get center of sides of square
+                centerTop=[topLeft[0]+(topRight[0]-topLeft[0])/2, topLeft[1]+(topRight[1]-topLeft[1])/2]
+                centerLeft=[topLeft[0]+(bottomLeft[0]-topLeft[0])/2, topLeft[1]+(bottomLeft[1]-topLeft[1])/2]
+                centerRight=[topRight[0]+(bottomRight[0]-topRight[0])/2, topRight[1]+(bottomRight[1]-topRight[1])/2]
+                centerBottom=[bottomLeft[0]+(bottomRight[0]-bottomLeft[0])/2, bottomLeft[1]+(bottomRight[1]-bottomLeft[1])/2]
+
+                #square width and height
+                width=(centerRight[0]-centerLeft[0])
+                height=(centerBottom[1]-centerTop[1])
+
+                #sample points are stored as [x,y,color]
+                topSamplePoint=[centerTop[0],centerTop[1]+height*shiftConstant]
+                leftSamplePoint=[centerLeft[0]+width*shiftConstant,centerLeft[1]]
+                rightSamplePoint=[centerRight[0]-width*shiftConstant,centerRight[1]]
+                bottomSamplePoint=[centerBottom[0], centerBottom[1]-height*shiftConstant]
+
+                fourSamplePoints=[topSamplePoint,leftSamplePoint,rightSamplePoint,bottomSamplePoint]
                 #get what color each point is
-                for samplePoint in squareSamplePoints:
-                    samplePoint.append(self.sampleImageColor(image,samplePoint[0],samplePoint[1]))
+                for samplePoint in fourSamplePoints:
+                    samplePoint.append(sampleImageColor(image,samplePoint[0],samplePoint[1]))
 
-                samplePoints[-1].append(squareSamplePoints)
+                samplePoints[-1].append(fourSamplePoints)
         return samplePoints
-
-    def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight,row=0):
-        raise Exception("You need to define this function")
 
 
     #gets the nearest point on the grid to (x,y)
@@ -330,14 +357,78 @@ class NodeNetwork:
 
             height, width, channels = im.shape
 
+            margin=50
+            vertexVSpacing=(height-2*margin)/(len(samplePoints)-1)
+            vertexHSpacing=(width-2*margin)/(len(samplePoints[0])-1)
+
+            spacing=min(vertexVSpacing, vertexHSpacing)
+            vertexVSpacing=spacing
+            vertexHSpacing=spacing
+
+            islandSpacing=(vertexVSpacing+vertexHSpacing)/6
             for (rowI, row) in enumerate(samplePoints):
                 for (vertexI, vertex) in enumerate(row):
+                    vertexX=int(margin+vertexI*vertexHSpacing)
+                    vertexY=int(margin+rowI*vertexVSpacing)
+
+                    if(vertex[0][2]+vertex[1][2]+vertex[2][2]+vertex[3][2]!=0):
+                        im=cv2.circle(im,(int(vertexX),int(vertexY)),3,RED,-1)
+                    elif(vertex[0][2]+vertex[1][2]!=0 or vertex[0][2]+vertex[2][2]!=0):
+                        im=cv2.circle(im,(int(vertexX),int(vertexY)),3,BLUE,-1)
                     for (pointI, point) in enumerate(vertex):
+
                         if(point[2]==1):
                             color=WHITE
                         else:
                             color=BLACK
-                        im=cv2.circle(im, (int(point[0]),int(point[1])), 3, color, -1)
+
+                        if(pointI==0):
+                            x=vertexX
+                            y=vertexY-islandSpacing
+                        elif(pointI==1):
+                            x=vertexX-islandSpacing
+                            y=vertexY
+                        elif(pointI==2):
+                            x=vertexX+islandSpacing
+                            y=vertexY
+                        elif(pointI==3):
+                            x=vertexX
+                            y=vertexY+islandSpacing
+
+                        if(rowI==0 and pointI==0):
+                            #im=cv2.circle(im,(int(point[0]),int(point[1])),4,color,-1)
+                            pass
+                        elif(vertexI == len(row)-1 and pointI==2):
+                            #im=cv2.circle(im,(int(point[0]),int(point[1])),4,color,-1)
+                            pass
+                        elif(vertexI ==0 and pointI==1):
+                            #im=cv2.circle(im,(int(point[0]),int(point[1])),4,color,-1)
+                            pass
+                        elif(rowI==len(samplePoints)-1 and pointI==3):
+                            #im=cv2.circle(im,(int(point[0]),int(point[1])),4,color,-1)
+                            pass
+
+                        elif(pointI==2 or pointI==3):
+                            if(pointI==2):
+                                otherPoint=row[vertexI+1][1]
+                                otherX=x+vertexHSpacing-2*islandSpacing
+                                otherY=y
+                            else:
+                                otherPoint=samplePoints[rowI+1][vertexI][0]
+                                otherX=x
+                                otherY=y+vertexVSpacing-2*islandSpacing
+
+                            if(otherPoint[2]==1):
+                                otherColor=WHITE
+                            else:
+                                otherColor=BLACK
+
+                            im=cv2.line(im, (int(x),int(y)), (int(otherX),int(otherY)), BLACK, 2)
+
+                            ##midPoint=[(point[0]+otherPoint[0])/2, (point[1]+otherPoint[1])/2]
+                            ##im=cv2.line(im, (int(point[0]),int(point[1])), (int(midPoint[0])-1, int(midPoint[1])), color, 3)
+                            ##im=cv2.line(im, (int(midPoint[0]), int(midPoint[1])), (int(otherPoint[0])+1,int(otherPoint[1])),  otherColor, 3)"""
+                        im=cv2.circle(im,(int(x),int(y)),3,color,-1)
     def dataAsString(self):
         string=""
         for (rowI, row) in enumerate(self.getSamplePoints()):
@@ -347,3 +438,58 @@ class NodeNetwork:
                 string+="\t"
             string+="\n"
         return string
+
+
+
+
+n=NodeNetwork(Node(10,10),Node(800,10),Node(30,800),Node(700,700),args.rows, args.columns)
+
+
+
+
+def show():
+    imWidth=1000;
+    imHeight=1000;
+
+    outputImage=image.copy()
+    n.draw(outputImage)
+    cv2.imshow("window",outputImage)
+
+    outputImage=np.zeros((imHeight,imWidth,3), np.uint8)
+    outputImage[:,:]=(127,127,127)
+    n.drawData(outputImage)
+    cv2.imshow("output",outputImage)
+
+
+
+
+
+
+def mouse_event(event, x, y,flags, param):
+    if event == cv2.EVENT_RBUTTONDOWN:
+        n.splitAtClosestPoint(x,y)
+    elif event ==cv2.EVENT_LBUTTONDOWN:
+        n.selectNearestFixedPoint(x,y)
+        n.dragging=True
+    elif event==cv2.EVENT_MOUSEMOVE:
+        n.updateDragging(x,y)
+    elif event==cv2.EVENT_LBUTTONUP:
+        n.dragging=False
+    elif event == cv2.EVENT_RBUTTONDOWN:
+        pass
+
+    show()
+
+show();
+cv2.setMouseCallback('window', mouse_event)
+cv2.waitKey(0)
+
+with open('output.csv', 'w') as file:
+    file.write(n.dataAsString())
+
+outputImage=np.zeros((1000,1000,3), np.uint8)
+outputImage[:,:]=(127,127,127)
+n.drawData(outputImage)
+cv2.imwrite("output.jpg", np.float32(outputImage));
+
+cv2.destroyAllWindows()

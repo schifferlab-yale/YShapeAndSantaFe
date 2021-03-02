@@ -51,7 +51,7 @@ print(stdColor)
 def getCol(im,x,y):
     return (int(im[x][y][0])+int(im[x][y][1])+int(im[x][y][2]))/3
 
-c=1.2;
+c=0.8;
 for i in range(imWidth):
     for j in range(imHeight):
         col=getCol(im,i,j)
