@@ -33,6 +33,8 @@ class Node:
         return [self.x,self.y]
     def drawLineTo(self,node,im):
         im=cv2.line(im, self.xyAsIntTuple(), node.xyAsIntTuple(), RED, 2)
+    def copy(self):
+        return Node(self.x,self.y)
     def __str__(self):
         return "("+str(self.x)+","+str(self.y)+")"
 
@@ -225,7 +227,7 @@ class NodeNetwork:
                 bottomLeft=grid[rowI+1][pointI]
                 bottomRight=grid[rowI+1][pointI+1]
 
-                squareSamplePoints=self.getSamplePointsFromSquare(topLeft,topRight,bottomLeft,bottomRight, row=rowI)
+                squareSamplePoints=self.getSamplePointsFromSquare(topLeft,topRight,bottomLeft,bottomRight, row=rowI, col=pointI)
                 #get what color each point is
                 for samplePoint in squareSamplePoints:
                     samplePoint.append(self.sampleImageColor(image,samplePoint[0],samplePoint[1]))
@@ -347,3 +349,51 @@ class NodeNetwork:
                 string+="\t"
             string+="\n"
         return string
+
+    def addRow(self):
+        self.rows+=1;
+        self.fixedRows.append(self.rows-1)
+        for point in self.fixedPoints:
+            if(point["row"]==self.rows-2):
+                point["row"]+=1
+        self.fixedRows.remove(self.rows-2)
+    def addCol(self):
+        self.cols+=1
+        self.fixedCols.append(self.cols-1)
+        for point in self.fixedPoints:
+            if(point["col"]==self.cols-2):
+                point["col"]+=1;
+
+        self.fixedCols.remove(self.cols-2)
+    def removeRow(self):
+        if self.rows<=2:
+            return
+
+        #Save the positions of the fixed points in the row to be removed
+        savedPoints=[point for point in self.getSortedFixedPoints() if point["row"]==self.rows-1]
+
+        self.rows-=1
+        self.fixedRows.remove(self.rows)
+        self.fixedRows.append(self.rows-1)
+
+        #remove fixed points in removed row
+        self.fixedPoints=[point for point in self.fixedPoints if point["row"]<self.rows]
+        self.fixedCols.sort()
+        for (point,col) in zip(savedPoints, self.fixedCols):
+            self.addFixedPointNotRecursive(point["node"],self.rows-1,col)
+
+
+    def removeCol(self):
+        if self.cols<=2:
+            return;
+        savedPoints=[point for point in self.getSortedFixedPoints() if point["col"]==self.cols-1]
+
+        self.cols-=1
+        self.fixedCols.remove(self.cols)
+        if self.cols-1 not in self.fixedCols:
+            self.fixedCols.append(self.cols-1)
+
+        self.fixedPoints=[point for point in self.fixedPoints if point["col"]<self.cols]
+        self.fixedRows.sort()
+        for (point,row) in zip(savedPoints, self.fixedRows):
+            self.addFixedPointNotRecursive(point["node"],row,self.cols-1)

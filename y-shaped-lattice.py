@@ -9,8 +9,11 @@ from nodeNetwork import *
 #Set up argparser to allow for input image
 parser = argparse.ArgumentParser(description='MFM image analysis')
 parser.add_argument('image', metavar='image', type=str, nargs='+',help='Path of image')
-parser.add_argument('-r', "--rows", metavar='r', help="number of rows", type=int, default=10)
-parser.add_argument('-c', "--columns", metavar='c', help="number of columns", type=int, default=10)
+parser.add_argument('-r', "--rows",  help="number of rows", type=int, default=10)
+parser.add_argument('-c', "--columns",  help="number of columns", type=int, default=10)
+parser.add_argument('-s', "--spacing",  help="how dense the islands are packed small=denser (default=0.25)", type=float, default=0.25)
+parser.add_argument("-o", "--offset",  help="Set if the first row is shifted to the right, don't set if the second row is shifted to the right",action='store_true', default=False)
+parser.add_argument("-t", "--trim", help="Set if the offset row is shorter than the non-offset rows",action="store_true", default=False)
 args=parser.parse_args()
 
 try:
@@ -26,11 +29,10 @@ GREEN=(0,255,0)
 BLUE=(255,0,0)
 RED=(0,0,255)
 
-
-class SquareNodeNetwork(NodeNetwork):
-    def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight,row=0):
+shiftConstant=args.spacing;
+class YShapeNodeNetwork(NodeNetwork):
+    def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight,row=0,col=0):
         #multiplier for how far the sample points are from the edge of the square
-        shiftConstant=0.15
 
         #get center of sides of square
         centerTop=[topLeft[0]+(topRight[0]-topLeft[0])/2, topLeft[1]+(topRight[1]-topLeft[1])/2]
@@ -50,13 +52,33 @@ class SquareNodeNetwork(NodeNetwork):
 
         samplePoints=[leftSamplePoint, rightSamplePoint, middleSamplePoint, bottomSamplePoint]
 
-        if(row%2==1):
+        if((row%2==0 and args.offset==True) or (row%2==1 and args.offset==False) ):
             for point in samplePoints:
                 point[0]+=width/2
+
+            #odd rows are shorter
+            if(args.trim and col+1==self.cols-1):
+                return [];
 
 
 
         return samplePoints
+    def drawData(self, im):
+        if not self.dragging:
+            samplePoints=self.getSamplePoints()
+
+            height, width, channels = im.shape
+
+            for (rowI, row) in enumerate(samplePoints):
+                for (vertexI, vertex) in enumerate(row):
+                    for (pointI, point) in enumerate(vertex):
+                        if(point[2]==1):
+                            color=WHITE
+                        else:
+                            color=BLACK
+                        if(pointI!=2):
+                            im=cv2.line(im,(int(point[0]),int(point[1])),(int(vertex[2][0]),int(vertex[2][1])),color,2)
+                        im=cv2.circle(im, (int(point[0]),int(point[1])), 3, color, -1)
     def hasError(self, samplePoints, rowI, vertexI, pointI):
         if(pointI==2):
             sum=0;
@@ -70,7 +92,7 @@ class SquareNodeNetwork(NodeNetwork):
             return False
 
 
-n=SquareNodeNetwork(Node(10,10),Node(800,10),Node(30,800),Node(700,700),args.rows, args.columns,image)
+n=YShapeNodeNetwork(Node(10,10),Node(800,10),Node(30,800),Node(700,700),args.rows+1, args.columns+1,image)
 n.pointSampleWidth=1
 
 
@@ -110,9 +132,39 @@ def mouse_event(event, x, y,flags, param):
 
 show();
 cv2.setMouseCallback('window', mouse_event)
-cv2.waitKey(0)
+
+print("Enter: Quit and Save")
+print("+/-: Increase/decrease island spacing")
+print("r/e: Add/remove row")
+print("c/x: Add/remove column")
+print("o: toggle row offset")
+print("t: toggle row trim")
+while(True):
+    key=cv2.waitKey(0)
+    if(key==ord("\r")):
+        break;
+    elif(key==ord("+")):
+        if shiftConstant<0.5:
+            shiftConstant+=0.01
+    elif(key==ord("-")):
+        if shiftConstant>0:
+            shiftConstant-=0.01
+    elif(key==ord("r")):
+        n.addRow()
+    elif(key==ord("e")):
+        n.removeRow()
+    elif(key==ord("c")):
+        n.addCol()
+    elif(key==ord("x")):
+        n.removeCol()
+    elif(key==ord("o")):
+        args.offset=not args.offset
+    elif(key==ord("t")):
+        args.trim=not args.trim
+    show()
 
 with open('output.csv', 'w') as file:
+    file.write("topLeft, topRight, middle, bottom\n")
     file.write(n.dataAsString())
 
 outputImage=np.zeros((1000,1000,3), np.uint8)
