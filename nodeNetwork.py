@@ -77,6 +77,10 @@ class NodeNetwork:
         #how far around the pixel to look
         self.pointSampleWidth=2
 
+        #array of stored samplepoints
+        self.samplePoints=[]
+        self.setSamplePoints()
+
 
     def draw(self,im):
 
@@ -121,15 +125,19 @@ class NodeNetwork:
 
         #draw the sample points if we are not dragging
         if not self.dragging:
-            samplePoints=self.getSamplePoints()
+            samplePoints=self.samplePoints
             for (rowI, row) in enumerate(samplePoints):
                 for (vertexI, vertex) in enumerate(row):
                     for (pointI, point) in enumerate(vertex):
                         #Draw Point based on color
                         if(point[2]==1):
-                            im=cv2.circle(im,(int(point[0]),int(point[1])),2,RED,-1)
-                        else:
-                            im=cv2.circle(im,(int(point[0]),int(point[1])),2,BLUE,-1)
+                            color=RED
+                        elif(point[2]==0):
+                            color=GREEN
+                        elif(point[2]==-1):
+                            color=BLUE
+
+                        im=cv2.circle(im,(int(point[0]),int(point[1])),2,color,-1)
 
                         #Check for errors:
                         if(self.hasError(samplePoints,rowI,vertexI,pointI)):
@@ -211,7 +219,7 @@ class NodeNetwork:
         return -1
 
     #get sample points as [row][vertex][island] which is an array [x,y,color]
-    def getSamplePoints(self):
+    def setSamplePoints(self):
         image=self.image
 
 
@@ -233,10 +241,27 @@ class NodeNetwork:
                     samplePoint.append(self.sampleImageColor(image,samplePoint[0],samplePoint[1]))
 
                 samplePoints[-1].append(squareSamplePoints)
-        return samplePoints
+        self.samplePoints=samplePoints
 
     def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight,row=0):
         raise Exception("You need to define this function")
+
+
+    def toggleNearestSamplePoint(self,x,y):
+        closestPoint=self.samplePoints[0][0][0]
+        closestDist=10000000
+        for row in self.samplePoints:
+            for island in row:
+                for point in island:
+                    distance=dist([x,y],point)
+                    if(distance<closestDist):
+                        closestPoint=point
+                        closestDist=distance
+
+        closestPoint[2]+=1
+        if(closestPoint[2]==2):
+            closestPoint[2]=-1
+
 
 
     #gets the nearest point on the grid to (x,y)
@@ -293,7 +318,8 @@ class NodeNetwork:
             self.fixedCols.append(col)
         self.fixedPoints.append({"row":row, "col":col, "node":node})
 
-    #safe to use function to make a given row and col location a fixed ponit
+    #safe to use function to make a given row and col location a fixed point
+    #(not actually recursive, it is just called that from when it used to be)
     def addFixedPointRecursive(self,node,row,col):
 
         toAdd=[(node,row,col)]
@@ -312,7 +338,7 @@ class NodeNetwork:
         for i in toAdd:
             self.addFixedPointNotRecursive(*i)
 
-    #git fixed points sorted left-to-right, top-to-bottom
+    #get fixed points sorted left-to-right, top-to-bottom
     def getSortedFixedPoints(self):
         def eval(node):
             return node["row"]*2*self.cols+node["col"]
@@ -323,15 +349,21 @@ class NodeNetwork:
     def updateDragging(self,x,y):
         if(self.dragging):
             self.selectedPoint["node"].x=x;
-            self.selectedPoint["node"].y=y
+            self.selectedPoint["node"].y=y;
+
+    #stop dragging and update the sample points
+    def stopDragging(self):
+        if(self.dragging):
+            self.dragging=False;
+            self.setSamplePoints()
 
     #draw output
+    #this will simply draw a colored circle at each point, for better drawing overwrite
+    #this function in the subclass
     def drawData(self, im):
         if not self.dragging:
-            samplePoints=self.getSamplePoints()
-
+            samplePoints=self.samplePoints
             height, width, channels = im.shape
-
             for (rowI, row) in enumerate(samplePoints):
                 for (vertexI, vertex) in enumerate(row):
                     for (pointI, point) in enumerate(vertex):
@@ -342,7 +374,7 @@ class NodeNetwork:
                         im=cv2.circle(im, (int(point[0]),int(point[1])), 3, color, -1)
     def dataAsString(self):
         string=""
-        for (rowI, row) in enumerate(self.getSamplePoints()):
+        for (rowI, row) in enumerate(self.samplePoints):
             for (vertexI, vertex) in enumerate(row):
                 for (pointI, point) in enumerate(vertex):
                     string+=str(point[2])+", "
@@ -350,13 +382,21 @@ class NodeNetwork:
             string+="\n"
         return string
 
+    #add row to end of lattice
     def addRow(self):
         self.rows+=1;
+        #make the last row fixed
         self.fixedRows.append(self.rows-1)
+
+        #move all teh fixed points on the last row to the new last row
         for point in self.fixedPoints:
             if(point["row"]==self.rows-2):
                 point["row"]+=1
+        #the second to last row is no longer fixed
         self.fixedRows.remove(self.rows-2)
+        self.setSamplePoints()
+
+    #add col to end of lattice
     def addCol(self):
         self.cols+=1
         self.fixedCols.append(self.cols-1)
@@ -365,6 +405,9 @@ class NodeNetwork:
                 point["col"]+=1;
 
         self.fixedCols.remove(self.cols-2)
+        self.setSamplePoints()
+
+    #remove last row
     def removeRow(self):
         if self.rows<=2:
             return
@@ -381,19 +424,29 @@ class NodeNetwork:
         self.fixedCols.sort()
         for (point,col) in zip(savedPoints, self.fixedCols):
             self.addFixedPointNotRecursive(point["node"],self.rows-1,col)
+        self.setSamplePoints()
 
 
+    #removes the last column from the lattice
     def removeCol(self):
+        #must have at least two columns
         if self.cols<=2:
             return;
+
+        #save the fixed points in the last column because we have to move them up one
         savedPoints=[point for point in self.getSortedFixedPoints() if point["col"]==self.cols-1]
 
+        #remove column
         self.cols-=1
         self.fixedCols.remove(self.cols)
+
+        #fix the last column
         if self.cols-1 not in self.fixedCols:
             self.fixedCols.append(self.cols-1)
 
+        #add back in the fixed points
         self.fixedPoints=[point for point in self.fixedPoints if point["col"]<self.cols]
         self.fixedRows.sort()
         for (point,row) in zip(savedPoints, self.fixedRows):
             self.addFixedPointNotRecursive(point["node"],row,self.cols-1)
+        self.setSamplePoints()

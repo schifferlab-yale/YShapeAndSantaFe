@@ -14,6 +14,7 @@ parser.add_argument('-c', "--columns",  help="number of columns", type=int, defa
 parser.add_argument('-s', "--spacing",  help="how dense the islands are packed small=denser (default=0.25)", type=float, default=0.25)
 parser.add_argument("-o", "--offset",  help="Set if the first row is shifted to the right, don't set if the second row is shifted to the right",action='store_true', default=False)
 parser.add_argument("-t", "--trim", help="Set if the offset row is shorter than the non-offset rows",action="store_true", default=False)
+parser.add_argument("-a", "--reference_image", help="image of the height(to help line up the sample points)", type=str)
 args=parser.parse_args()
 
 try:
@@ -21,6 +22,17 @@ try:
     image = cv2.resize(image, (1000,1000))
 except:
     raise Exception("File not found")
+
+if args.reference_image is not None:
+    try:
+        height_image = cv2.imread(args.reference_image)
+        height_image = cv2.resize(height_image, (1000,1000))
+    except:
+        raise Exception("File not found")
+else:
+    height_image=np.zeros((1000,1000,3), np.uint8)
+
+
 
 #constants
 WHITE=(255,255,255)
@@ -30,6 +42,7 @@ BLUE=(255,0,0)
 RED=(0,0,255)
 
 shiftConstant=args.spacing;
+show_ref_image=False
 class YShapeNodeNetwork(NodeNetwork):
     def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight,row=0,col=0):
         #multiplier for how far the sample points are from the edge of the square
@@ -65,7 +78,7 @@ class YShapeNodeNetwork(NodeNetwork):
         return samplePoints
     def drawData(self, im):
         if not self.dragging:
-            samplePoints=self.getSamplePoints()
+            samplePoints=self.samplePoints;
 
             height, width, channels = im.shape
 
@@ -74,6 +87,8 @@ class YShapeNodeNetwork(NodeNetwork):
                     for (pointI, point) in enumerate(vertex):
                         if(point[2]==1):
                             color=WHITE
+                        elif(point[2]==0):
+                            color=RED
                         else:
                             color=BLACK
                         if(pointI!=2):
@@ -101,7 +116,10 @@ def show():
     imWidth=1000;
     imHeight=1000;
 
-    outputImage=image.copy()
+    if(show_ref_image):
+        outputImage=height_image.copy()
+    else:
+        outputImage=image.copy()
     n.draw(outputImage)
     cv2.imshow("window",outputImage)
 
@@ -119,12 +137,15 @@ def mouse_event(event, x, y,flags, param):
     if event == cv2.EVENT_RBUTTONDOWN:
         n.splitAtClosestPoint(x,y)
     elif event ==cv2.EVENT_LBUTTONDOWN:
-        n.selectNearestFixedPoint(x,y)
-        n.dragging=True
+        if(flags==16 or flags==17):
+            n.toggleNearestSamplePoint(x,y)
+        else:
+            n.selectNearestFixedPoint(x,y)
+            n.dragging=True
     elif event==cv2.EVENT_MOUSEMOVE:
         n.updateDragging(x,y)
     elif event==cv2.EVENT_LBUTTONUP:
-        n.dragging=False
+        n.stopDragging()
     elif event == cv2.EVENT_RBUTTONDOWN:
         pass
 
@@ -139,6 +160,7 @@ print("r/e: Add/remove row")
 print("c/x: Add/remove column")
 print("o: toggle row offset")
 print("t: toggle row trim")
+print("q: toggle reference image")
 while(True):
     key=cv2.waitKey(0)
     if(key==ord("\r")):
@@ -146,24 +168,35 @@ while(True):
     elif(key==ord("+")):
         if shiftConstant<0.5:
             shiftConstant+=0.01
+        n.setSamplePoints()
     elif(key==ord("-")):
         if shiftConstant>0:
             shiftConstant-=0.01
+        n.setSamplePoints()
     elif(key==ord("r")):
         n.addRow()
     elif(key==ord("e")):
         n.removeRow()
+
     elif(key==ord("c")):
         n.addCol()
     elif(key==ord("x")):
         n.removeCol()
     elif(key==ord("o")):
         args.offset=not args.offset
+        n.setSamplePoints()
     elif(key==ord("t")):
         args.trim=not args.trim
+        n.setSamplePoints()
+    elif(key==ord("q")):
+        show_ref_image=not show_ref_image
     show()
 
 with open('output.csv', 'w') as file:
+    if(args.offset==True):
+        file.write("first row offset\n")
+    else:
+        file.write("second row offset\n")
     file.write("topLeft, topRight, middle, bottom\n")
     file.write(n.dataAsString())
 
