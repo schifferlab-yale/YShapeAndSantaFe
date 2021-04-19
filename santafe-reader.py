@@ -103,7 +103,7 @@ class SantaFeNodeNetwork(NodeNetwork):
             surroundingPoints.append(samplePoints[rowI][vertexI-1])
 
         for point in surroundingPoints:
-            if point==[]:
+            if point==[] or point[0][2]==0 or samplePoints[rowI][vertexI][0][2]==0:
                 continue
             elif point[0][2]==samplePoints[rowI][vertexI][0][2]:
                 return True
@@ -162,7 +162,6 @@ class SantaFeNodeNetwork(NodeNetwork):
 
 
         return string
-
     def drawData(self,im):
         if self.dragging:
             return
@@ -188,6 +187,54 @@ class SantaFeNodeNetwork(NodeNetwork):
                             im=cv2.arrowedLine(im,(int(cell[0][0]),int(cell[0][1])),(int(point[0][0]),int(point[0][1])),WHITE,1,tipLength=0.3)
                         else:
                             im=cv2.arrowedLine(im,(int(point[0][0]),int(point[0][1])),(int(cell[0][0]),int(cell[0][1])),WHITE,1,tipLength=0.3)
+
+    def correctError(self,rowI,cellI):
+        samplePoints=self.samplePoints
+        cell=self.samplePoints[rowI][cellI]
+        row=samplePoints[rowI]
+        if(len(cell)==0):
+            return#no point here
+
+        otherRowI=None
+        otherCellI=None
+        if(rowI>0 and samplePoints[rowI-1][cellI]!=[]):
+            otherRowI=rowI-1
+            otherCellI=cellI
+        if(cellI>0 and samplePoints[rowI][cellI-1]!=[]):
+            otherRowI=rowI
+            otherCellI=cellI-1
+        if(rowI<len(samplePoints)-1 and samplePoints[rowI+1][cellI]!=[]):
+            otherRowI=rowI+1
+            otherCellI=cellI
+        if(cellI<len(row)-1 and samplePoints[rowI][cellI+1]!=[]):
+            otherRowI=rowI
+            otherCellI=cellI+1
+
+        if(otherRowI is None):#no surrounding points
+            return
+
+        if(cell[0][2]!=samplePoints[otherRowI][otherCellI][0][2]):
+            return; #no error
+
+        if cell[0][2]==0 or samplePoints[otherRowI][otherCellI][0][2]==0:
+            return#bad data
+
+        color=self.sampleImageColor(image,cell[0][0],cell[0][1])
+        otherColor=self.sampleImageColor(image,samplePoints[otherRowI][otherCellI][0][0],samplePoints[otherRowI][otherCellI][0][1])
+
+        if(color>otherColor):
+            cell[0][2]=1
+            samplePoints[otherRowI][otherCellI][0][2]=-1
+        else:
+            cell[0][2]=-1
+            samplePoints[otherRowI][otherCellI][0][2]=1
+    def correctErrors(self):
+        samplePoints=self.samplePoints
+        for (rowI,row) in enumerate(samplePoints):
+            for(cellI,cell) in enumerate(row):
+                self.correctError(rowI,cellI)
+
+
 
 
 
@@ -218,8 +265,9 @@ def show():
 
 
 
-
+lastMouse=(0,0)
 def mouse_event(event, x, y,flags, param):
+    global lastMouse
     if event == cv2.EVENT_RBUTTONDOWN:
         n.splitAtClosestPoint(x,y)
     elif event ==cv2.EVENT_LBUTTONDOWN:
@@ -234,6 +282,7 @@ def mouse_event(event, x, y,flags, param):
         n.stopDragging()
     elif event == cv2.EVENT_RBUTTONDOWN:
         pass
+    lastMouse=(x,y)
 
     show()
 """
@@ -252,14 +301,6 @@ while(True):
     key=cv2.waitKey(0)
     if(key==ord("\r")):
         break;
-    elif(key==ord("+")):
-        if shiftConstant<0.5:
-            shiftConstant+=0.01
-        n.setSamplePoints()
-    elif(key==ord("-")):
-        if shiftConstant>0:
-            shiftConstant-=0.01
-        n.setSamplePoints()
     elif(key==ord("r")):
         n.addRow()
     elif(key==ord("e")):
@@ -272,9 +313,6 @@ while(True):
     elif(key==ord("o")):
         offset=not offset
         n.setSamplePoints()
-    elif(key==ord("t")):
-        args.trim=not args.trim
-        n.setSamplePoints()
     elif(key==ord("q")):
         show_ref_image=not show_ref_image
     elif(key==ord("a")):
@@ -283,6 +321,16 @@ while(True):
     elif(key==ord("b")):
         colOffset+=1
         n.setSamplePoints()
+    elif(key==ord("j")):
+        for i in range(10):
+            n.jiggleNearestFixedPoint(*lastMouse)
+            print(i)
+        print("done")
+    elif(key==ord("f")):
+        n.correctErrors()
+    elif(key==ord("g")):
+        nearest=n.getNearestSamplePoint(*lastMouse)
+        n.correctError(nearest["row"],nearest["col"])
     show()
 
 with open('output.csv', 'w') as file:

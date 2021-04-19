@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 import math
+from random import random
+import time
 
 #constants
 WHITE=(255,255,255)
@@ -47,6 +49,9 @@ def xyArrayToIntTuple(arr):
 class NodeNetwork:
     def __init__(self,topLeft,topRight,bottomLeft,bottomRight,rows, cols, image):
         self.image=image;
+        #how far around the pixel to look
+        self.pointSampleWidth=5
+        self.bwImage=self.makeBWImage(image)
 
         #number of rows and columns
         self.rows=rows;
@@ -74,12 +79,54 @@ class NodeNetwork:
         self.fixedRows=[0,rows-1]
         self.fixedCols=[0,cols-1]
 
-        #how far around the pixel to look
-        self.pointSampleWidth=2
+
 
         #array of stored samplepoints
         self.samplePoints=[]
         self.setSamplePoints()
+    def makeBWImage(self,image):
+        avg_color_per_row = np.average(image, axis=0)
+        avg_color = np.average(avg_color_per_row, axis=0)
+        avg=np.average(avg_color,axis=0)
+        print("Average color:",avg)
+
+        blur = cv2.GaussianBlur(image,(self.pointSampleWidth,self.pointSampleWidth),0)
+        self.blurredImage=blur
+        ret,self.BWImage=cv2.threshold(blur,avg,255,cv2.THRESH_BINARY)
+        cv2.imwrite("bw.jpg", self.BWImage);
+
+    def countErrors(self):
+        count=0
+        for (rowI, row) in enumerate(self.samplePoints):
+            for (vertexI, vertex) in enumerate(row):
+                for (pointI, point) in enumerate(vertex):
+                    if(self.hasError(self.samplePoints,rowI,vertexI,pointI)):
+                        count+=1
+        return count
+
+
+    def jiggleNearestFixedPoint(self,x,y):
+
+        fixedPoint=self.getNearestFixedPoint(x,y)
+
+
+        errorsBefore=self.countErrors()
+
+        node=fixedPoint["node"]
+        originalNode=node.copy()
+
+        radius=5
+
+        node.x+=random()*2*radius-radius
+        node.y+=random()*2*radius-radius
+
+        self.setSamplePoints()
+
+
+        if(errorsBefore<self.countErrors()):
+            fixedPoint["node"]=originalNode
+        self.setSamplePoints()
+
 
 
     def draw(self,im):
@@ -190,7 +237,8 @@ class NodeNetwork:
         return grid
 
     def sampleImageColor(self,im,x,y):
-        avg=0;
+        return self.blurredImage[int(y)][int(x)][0]
+        """avg=0;
         count=0;#number of pixels checked
         width=self.pointSampleWidth;#distance away from center pixel to sample
         x=int(x)
@@ -214,7 +262,10 @@ class NodeNetwork:
 
         #return avg color
         avg/=count;
-        if(avg>127):
+        return avg"""
+    def sampleImage(self,x,y):
+        color=self.BWImage[int(y)][int(x)][0]
+        if(color>127):
             return 1
         return -1
 
@@ -238,7 +289,7 @@ class NodeNetwork:
                 squareSamplePoints=self.getSamplePointsFromSquare(topLeft,topRight,bottomLeft,bottomRight, row=rowI, col=pointI)
                 #get what color each point is
                 for samplePoint in squareSamplePoints:
-                    samplePoint.append(self.sampleImageColor(image,samplePoint[0],samplePoint[1]))
+                    samplePoint.append(self.sampleImage(samplePoint[0],samplePoint[1]))
 
                 samplePoints[-1].append(squareSamplePoints)
         self.samplePoints=samplePoints
@@ -248,7 +299,8 @@ class NodeNetwork:
 
 
     def toggleNearestSamplePoint(self,x,y):
-        closestPoint=self.samplePoints[0][0][0]
+        closestPoint=None
+
         closestDist=10000000
         for row in self.samplePoints:
             for island in row:
@@ -290,7 +342,18 @@ class NodeNetwork:
                 nearestPointDist=distance
                 nearestPoint=point
         return nearestPoint
-
+    def getNearestSamplePoint(self,x,y):
+        nearestPoint=None
+        nearestPointDist=1000000000
+        toReturn={}
+        for (rowI,row) in enumerate(self.samplePoints):
+            for(colI,cell) in enumerate(row):
+                for (pointI,point) in enumerate(cell):
+                    distance=dist([x,y],point[0:2])
+                    if(distance<nearestPointDist):
+                        nearestPointDist=distance
+                        toReturn={"row":rowI,"col":colI,"index":pointI,"point":point}
+        return toReturn
 
     def selectNearestFixedPoint(self,x,y):
         self.selectedPoint=self.getNearestFixedPoint(x,y)
