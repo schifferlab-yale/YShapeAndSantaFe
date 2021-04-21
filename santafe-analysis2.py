@@ -982,4 +982,6 @@ if __name__=="__main__":
 
     cv2.imshow("window",outputImage)
     cv2.waitKey(0)
-    cv2.imwrite("analysis-output.jpg", np.float32(outputImage));
+
+    outputFileName=args.file.split(".")[0]+"_output.jpg"
+    cv2.imwrite(outputFileName, np.float32(outputImage));

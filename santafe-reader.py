@@ -333,12 +333,15 @@ while(True):
         n.correctError(nearest["row"],nearest["col"])
     show()
 
-with open('output.csv', 'w') as file:
+
+outputFileName=args.image[0].split(".")[0]+".csv"
+with open(outputFileName, 'w') as file:
     file.write(n.dataAsString())
 
 outputImage=np.zeros((1000,1000,3), np.uint8)
 outputImage[:,:]=(127,127,127)
 n.drawData(outputImage)
-cv2.imwrite("output.jpg", np.float32(outputImage));
+
+#cv2.imwrite("output.jpg", np.float32(outputImage));
 
 cv2.destroyAllWindows()
