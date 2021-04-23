@@ -317,7 +317,8 @@ class SantaFeLattice:
         self.updateCenters()#find the centers
 
         self.updateStrings()#find the strings
-        self.removeStringsNotConnectingInteriors()#removestrings that connect less than two interiors
+        #self.removeStringsNotConnectingInteriors()#removestrings that connect less than two interiors
+        self.removeIncompleteStrings();
         self.removeSmallStrings();
         self.updateCompositeSquareCenters()#find the center of composite squares and count how many strings are in each
 
@@ -431,6 +432,13 @@ class SantaFeLattice:
         x=paddingX+col/self.colCount*(imageWidth-2*paddingX)
         return (int(x),int(y))
 
+    def isEdge(self,row,col):
+        if(row==0 or col==0 or row==len(self.data)-1 or col==len(self.data[row])-1):
+            return True
+        if(self.getCell(row,col).center and (row==1 or col==1 or row==len(self.data)-2 or col==len(self.data[row])-2)):
+            return True
+        return False
+
     #properties to return number of rows and columns in grid
     @property
     def rowCount(self):
@@ -457,7 +465,7 @@ class SantaFeLattice:
             cv2.line(image,self.getXYFromRowCol(0,intercept,image),self.getXYFromRowCol(1000,slope*1000,image),RED,2)"""
 
         #cv2.line(image, self.getXYFromRowCol(*string.getCoM(),image), self.getXYFromRowCol(*self.getNearestStringNeighbor(string).getCoM(),image),RED,2)
-        #cv2.putText(image, str(string.getTrace().dotP(LineSegment(0,0,1,1)))[0:8], self.getXYFromRowCol(*string.lineSegments[0].start,image), cv2.FONT_HERSHEY_SIMPLEX,0.3, BLACK, 1, cv2.LINE_AA)
+        #cv2.putText(image, str(self.countTouchingEdges(string)), self.getXYFromRowCol(*string.lineSegments[0].start,image), cv2.FONT_HERSHEY_SIMPLEX,0.3, BLACK, 1, cv2.LINE_AA)
 
     #draw the line segment representation of each string
     def drawStringTraces(self,image):
@@ -487,10 +495,23 @@ class SantaFeLattice:
 
         return count
 
+    def countTouchingEdges(self,string):
+        count=0
+        touchedInteriors=[]#keep track of the ones we have already touchesd
+        for line in string.lineSegments:#loop through each line segment
+            if(self.isEdge(line.start[0],line.start[1])):
+                count+=1;
+            if(self.isEdge(line.end[0],line.end[1])):
+                count+=1;
+
+        return count
+
     #simply removes all strings that touch less than 2 interiors
     def removeStringsNotConnectingInteriors(self):
         self.strings=[string for string in self.strings if self.countTouchingInteriors(string)>=2]
 
+    def removeIncompleteStrings(self):
+        self.strings=[string for string in self.strings if self.countTouchingInteriors(string)>=2 or self.countTouchingEdges(string)==0]
     def removeSmallStrings(self):
         self.strings=[string for string in self.strings if string.getLength()>2]
 
@@ -534,6 +555,7 @@ class SantaFeLattice:
         if(cell.compositeSquareCenter):
             cv2.circle(image,(x,y),2,GREEN,-1)
             cv2.rectangle(image,(int(x-4*spacingX),int(y-4*spacingY)),(int(x+4*spacingX),int(y+4*spacingY)),GREEN,1)
+
             #cv2.putText(image, str(cell.stringsInCompositeSquare), (x,y), cv2.FONT_HERSHEY_SIMPLEX,0.3, BLACK, 1, cv2.LINE_AA)
         #cv2.putText(image, str(self.countArrowNeighbors(rowI,colI)), (x,y), cv2.FONT_HERSHEY_SIMPLEX,0.3, BLACK, 1, cv2.LINE_AA)
 
@@ -597,14 +619,66 @@ class SantaFeLattice:
         cell=self.getCell(rowI,colI)
         if(cell and cell.badData):
             return False
-        if(self.countArrowNeighbors(rowI,colI)==0 and self.countBadDataNeighbors(rowI,colI)==0 and cell is not None and cell.hasArrow==False):
+        if(cell is None or cell.hasArrow==True or self.countBadDataNeighbors(rowI,colI)!=0 or self.countArrowNeighbors(rowI,colI)!=0):
+            return False
+
+
+        valid=True
+
+        pattern=[
+        [-1,1,-1],
+        [1,0,1],
+        [0,0,0],
+        [1,0,1],
+        [-1,1,-1]
+        ]
+        for checkRowI, patternRowI in zip(range(rowI-2,rowI+3),range(0,5)):
+            for(checkColI, patternColI) in zip(range(colI-1,colI+2),range(0,3)):
+                if(pattern[patternRowI][patternColI]==-1):
+                    continue
+                cell=self.getCell(checkRowI,checkColI)
+                if(cell is None):
+                    valid=False
+                else:
+                    if(pattern[patternRowI][patternColI]==1 and not cell.hasArrow):
+                        valid=False
+                    if(pattern[patternRowI][patternColI]==0 and cell.hasArrow):
+                        valid=False
+
+        if(valid==True):
             return True
-        return False
+        valid=True
+
+        pattern=[
+        [-1,1,0,1,-1],
+        [1,0,0,0,1],
+        [-1,1,0,1,-1]
+        ]
+        for checkRowI, patternRowI in zip(range(rowI-1,rowI+2),range(0,3)):
+            for(checkColI, patternColI) in zip(range(colI-2,colI+3),range(0,5)):
+                if(pattern[patternRowI][patternColI]==-1):
+                    continue
+                cell=self.getCell(checkRowI,checkColI)
+                if(cell is None):
+                    valid=False
+                else:
+                    if(pattern[patternRowI][patternColI]==1 and not cell.hasArrow):
+                        valid=False
+                    if(pattern[patternRowI][patternColI]==0 and cell.hasArrow):
+                        valid=False
+
+        if(valid==False):
+            return False
+
+        #if(self.countArrowNeighbors(rowI,colI)==0 and self.countBadDataNeighbors(rowI,colI)==0 and cell is not None and cell.hasArrow==False):
+            #return True
+        return True
 
     #returns true if the given cell at (rowI,colI) is an interior center
     def isInteriorCenter(self,rowI,colI):
         if(not self.getCell(rowI,colI).center):
             raise Exception("This function should only be called on centers")
+
 
         #the basic algorithm is that if there are two centers seperated vertically or horizontally
         #by a distance of 2, those must be interior centers
@@ -881,6 +955,8 @@ class SantaFeLattice:
                 return 0
             correlation+=string1.getTrace().getCorrelation(string2.getTrace())
             count+=1;
+        if(count==0):
+            return 0
         return correlation/count;
 
 
@@ -968,7 +1044,7 @@ if __name__=="__main__":
     outString=args.file+", "
     outString+="correlation:"+str(lattice.getStringCorrelation())+", "
     outString+="nearest neighbor correlation:"+str(lattice.getNearestNeighborStringCorrelation())+", "
-    outString+="strings/composite square:"+str(len(lattice.strings)/lattice.numCompositeSquares())+"\n"
+    #outString+="strings/composite square:"+str(len(lattice.strings)/lattice.numCompositeSquares())+"\n"
     with open("out.txt","a") as file:
         file.write(outString)
 
