@@ -52,6 +52,7 @@ def getFurthestPoints(points):
                 furthestPoints=[point1,point2]
     return furthestPoints
 
+#works similar to get getFurthestPoints() except it will return an array with all pairs of points which are the furtheest distance apart
 def getAllFurthestPoints(points):
     if(len(points)<2):
         raise("must have at least two points")
@@ -69,6 +70,7 @@ def getAllFurthestPoints(points):
                 furthestPoints=[[point1,point2]]
     return furthestPoints
 
+#returns the center of a group of points
 def avgPoint(points):
     avgX=0.0;
     avgY=0.0;
@@ -79,6 +81,8 @@ def avgPoint(points):
     avgY/=len(points)
     return (avgX,avgY)
 
+
+#does a linear regression through a group of points and returns their angle
 def getAngle(points):
     avg=avgPoint(points)
 
@@ -103,11 +107,14 @@ def getAngle(points):
     else:
         return math.atan(numerator/denominator)
 
+#does a linear regression through a group of points and returns the y-intercept
 def getIntercept(points):
     avg=avgPoint(points)
     slope=getSlope(points)
 
     return avg[1]-slope*avg[0]
+
+#does a linear regression on a group of points and returns the angle of its slope
 def getSlope(points):
     avg=avgPoint(points)
     numerator=0
@@ -120,10 +127,15 @@ def getSlope(points):
         return 0
     return numerator/denominator
 
-
+#takes a graph of the form [[a,b,c],[d,e,f],...] and returns if there is a cycle
+#the input representation is that each index in the list is a node and each element in the
+#list at that index is the nodes it connects
 def graphHasCycle(graph):
     return _graphHasCycle(graph,[False]*len(graph),0,-1)
-    
+
+#main function for the grahp has cycle.
+#it works by traversing down the nodes and recursing at each split. If it ever sees a previous node then
+#there is a loop
 def _graphHasCycle(graph,seenPoints,point,prevPoint):
     seenPoints=[i for i in seenPoints]#deep copy
     seenPoints[point]=True
@@ -211,6 +223,11 @@ class LineSegment():
             return math.pi/2
         return math.atan((self.endY-self.startY)/(self.endX-self.startX))
 
+    def __eq__(self, o):
+        if((self.start==o.start and self.end==o.end) or (self.start==o.end and self.end==o.start)):
+            return True
+        return False
+
 #a string is essentially a collection of line segments
 class String():
     def __init__(self, lineSegments):
@@ -221,7 +238,8 @@ class String():
 
     #adds another line segment to this string
     def addLineSegment(self,lineSegment):
-        self.lineSegments.append(lineSegment)
+        if lineSegment not in self.lineSegments:
+            self.lineSegments.append(lineSegment)
 
     #merges two strings
     def addString(self,string):
@@ -298,6 +316,9 @@ class String():
         for line in self.lineSegments:
             length+=line.length
         return length
+    
+    def getSegmentCount(self):
+        return len(self.lineSegments)
 
 
     def asGraph(self):
@@ -318,7 +339,8 @@ class String():
         #https://stackoverflow.com/questions/526331/cycles-in-an-undirected-graph
         return graphHasCycle(self.asGraph())
 
-
+    def __repr__(self):
+        return str(self.id)
 
 
 #a point in teh grid which holds information about it
@@ -342,9 +364,9 @@ class Cell:
 
 #main class for holding the lattice
 class SantaFeLattice:
-    def __init__(self,csvFile,firstCenter=None,removeEdgeStrings=True):
+    def __init__(self,csvFile,firstCenter=None,removeEdgeStrings=True,autoAlignCenters=False, randomizeStringColor=False):
 
-        self.randomizeStringColor=False
+        self.randomizeStringColor=randomizeStringColor
 
         #csvread the data
         csvreader= csv.reader(csvFile, delimiter=",")
@@ -364,10 +386,16 @@ class SantaFeLattice:
         self.updateDimers()#find the dimers
 
         #find the centers
-        if firstCenter is None:
+        if(autoAlignCenters):
             self.updateCenters()
-        else:
+            firstCenter=self.findFirstCenter()
             self.updateCentersFromPattern(firstCenter)
+        else:
+            if firstCenter is None:
+                self.updateCenters()
+            else:
+                self.updateCentersFromPattern(firstCenter)
+        
 
         self.updateStrings()#find the strings
         #self.removeStringsNotConnectingInteriors()#removestrings that connect less than two interiors
@@ -467,9 +495,11 @@ class SantaFeLattice:
                             verticies[islandCount][type].append(invert(combination))
         self.vertexClasses=verticies
     
+    #gives a unique number to each row,col in the grid
     def getRowColIndex(self,row,col):
         return row*len(self.data)+col
     
+    #given a string, find what interior centers its touching
     def getTouchingCenters(self, string):
         touchingCenters=[]
         for point in string.getPoints():
@@ -477,13 +507,39 @@ class SantaFeLattice:
                 touchingCenters.append(point)
         
         return touchingCenters
+    
+    def getTouchingCompositeSquares(self, string):
+        touchingCenters=self.getTouchingCenters(string)
+
+        squares=[]
+        for center in touchingCenters:
+            square=self.getCorrespondingCompositeSquare(*center)
+            if square not in squares:
+                squares.append(square)
+        
+        return squares
+
+    
+    def getCorrespondingCompositeSquare(self,row,col):
+        assert self.getCell(row, col).interiorCenter
+
+        pattern=[(0,1),(0,-1),(1,0),(-1,0)]
+
+        for rowOff,colOff in pattern:
+            cell=self.getCell(row+rowOff,col+colOff)
+            if(cell and cell.compositeSquareCenter):
+                return (row+rowOff,col+colOff)
+        
+        return None
+        
+
 
     def getStringID(self,string):#generates an ID for a string based off the rows and columns its touching
-        touchingCenters=self.getTouchingCenters(string)
+        points=string.getPoints()
         
-        touchingCenters=sorted(touchingCenters)#sort in case things are in a different order between strings
+        points=frozenset(points)#sort in case things are in a different order between strings
 
-        return hash(str(touchingCenters))%(2**32-1)
+        return hash(points)%(2**32-1)
 
     def getStringsByTouchingInteriors(self):
         raise Exception("should not be using this function")
@@ -520,6 +576,7 @@ class SantaFeLattice:
         x=paddingX+col/self.colCount*(imageWidth-2*paddingX)
         return (int(x),int(y))
 
+    #return true if the cell is at the edge of a group of arrows (edge of the sample or inside of an unknown region)
     def isEdge(self,row,col):
         if(row==0 or col==0 or row==len(self.data)-1 or col==len(self.data[row])-1):
             return True
@@ -555,8 +612,9 @@ class SantaFeLattice:
         #cv2.line(image, self.getXYFromRowCol(*string.getCoM(),image), self.getXYFromRowCol(*self.getNearestStringNeighbor(string).getCoM(),image),RED,2)
         if(showID):
             text=str(string.id)
-            if(string.isLoop()):
-                text+=" loop"
+            #if(string.isLoop()):
+            #    text+=" loop"
+            #text+=" "+str(self.getTouchingCompositeSquares(string))
             cv2.putText(image, text, self.getXYFromRowCol(*string.getCoM(),image), cv2.FONT_HERSHEY_SIMPLEX,0.4, BLACK, 1, cv2.LINE_AA)
             
 
@@ -878,7 +936,49 @@ class SantaFeLattice:
                 if(cell.center):
                     cell.interiorCenter=self.isInteriorCenter(rowI,colI)
     
+    def findFirstCenter(self):
+        centerRowCount=[0]*16
+        centerColCount=[0]*16
+        for (rowI, row) in enumerate(self.data):
+            for (colI, cell) in enumerate(row):
+                if(cell.center and self.isInteriorCenter(rowI, colI)):
+                    if(self.getCell(rowI+2,colI).center and  self.isInteriorCenter(rowI+2, colI)):
+
+
+
+                        centerRowCount[(rowI+1 +(colI%16>=8)*8 )%16]+=1
+                        centerColCount[(colI +(rowI%16>=8)*0 )%16  ]+=1
+                    elif(self.getCell(rowI,colI+2).center and self.isInteriorCenter(rowI, colI+2)):
+                        continue
+                        centerRowCount[(rowI)%16]+=1
+                        centerColCount[(colI+1)%16]+=1
+        
+        rowChoice=-1
+        rowMaxCount=-1
+        colChoice=-1
+        colMaxCount=-1
+
+
+        for (i,count) in enumerate(centerRowCount):
+            if(count>rowMaxCount):
+                rowChoice=i
+                rowMaxCount=count
+        
+        for (i,count) in enumerate(centerColCount):
+            if(count>colMaxCount):
+                colChoice=i
+                colMaxCount=count
+
+        return (rowChoice-16, colChoice-16)
+
     def updateCentersFromPattern(self,firstCenter):
+
+        #first clear all centers
+        for row in self.data:
+            for cell in row:
+                cell.center=False
+                cell.interiorCenter=False
+
         initialCoord=np.asarray(firstCenter)
         
         upDownCenters=[(0,-3),(0,3),(-3,2),(-3,-2),(3,2),(3,-2)]
@@ -887,10 +987,10 @@ class SantaFeLattice:
         rowStartUpDown=True
         
         row=initialCoord[0]
-        while(row<len(self.data)):
+        while(row<len(self.data)+8):
             col=initialCoord[1]
             upDown=rowStartUpDown
-            while(col<len(self.data[row])):
+            while(col<len(self.data[0])+8):
 
                 #update Interior centers
                 if(upDown):
