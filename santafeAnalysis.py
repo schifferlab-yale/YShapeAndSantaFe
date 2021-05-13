@@ -20,6 +20,31 @@ RED=(0,0,255)
 GREY=(127,127,127)
 
 
+class VertexEnergy:
+    def __init__(self,par,perp):
+        self.par=par
+        self.perp=perp
+    def __repr__(self):
+        return f"{self.par}|| + {self.perp}x"
+    
+    def __add__(self,other):
+        return VertexEnergy(self.par+other.par,self.perp+other.perp)
+    
+    def __eq__(self,other):
+        return other.par==self.par and other.perp == self.perp
+    
+    def compare(self,other):
+        if(self==other):
+            return 0
+        if(self.par>other.par and self.perp>=other.perp or self.par>= other.par and self.perp>other.perp):
+            return 1
+        if(other.par>self.par and other.perp>=self.perp or other.par>=self.par and other.perp>self.perp):
+            return -1
+        if(other.par>self.par and other.perp<self.perp or other.par<self.par and other.perp>self.perp):
+            return None #can't tell which one is bigger
+        raise Exception("all cases should be caught")
+
+
 #just shifts every element in an array by one and loops the last one back to the front
 #eg cyclicRotate([a,b,c,d])=[d,a,b,c]
 def cyclicRotate(input):
@@ -584,6 +609,38 @@ class SantaFeLattice:
             return True
         return False
 
+    def getVertexEnergy(self,row,col):
+        parEnergy=0;
+        perpEnergy=0;
+
+        top,right,bottom,left = self.getInOutPattern(row,col)
+        
+        for pair in [(top,bottom),(right,left)]:
+            if pair[0] is None or pair[1] is None:
+                continue
+            if(pair[0]==pair[1]):
+                parEnergy+=1
+            else:
+                parEnergy-=1
+        
+        for pair in [(top,right),(right,bottom),(bottom,left),(left,top)]:
+            if(pair[0] is None or pair[1] is None):
+                continue
+            if(pair[0]==pair[1]):
+                perpEnergy+=1
+            else:
+                perpEnergy-=1
+        
+        return VertexEnergy(parEnergy,perpEnergy)
+    
+    def getStringEnergy(self,string):
+        energy=VertexEnergy(0,0)
+        for point in string.getPoints():
+            energy+=self.getVertexEnergy(*point)
+        return energy
+
+
+
     #properties to return number of rows and columns in grid
     @property
     def rowCount(self):
@@ -612,6 +669,7 @@ class SantaFeLattice:
         #cv2.line(image, self.getXYFromRowCol(*string.getCoM(),image), self.getXYFromRowCol(*self.getNearestStringNeighbor(string).getCoM(),image),RED,2)
         if(showID):
             text=str(string.id)
+            #text+=" "+str(self.getStringEnergy(string))
             #if(string.isLoop()):
             #    text+=" loop"
             #text+=" "+str(self.getTouchingCompositeSquares(string))
@@ -672,15 +730,15 @@ class SantaFeLattice:
 
 
     #just draws all cells in self.data
-    def drawCells(self,image):
+    def drawCells(self,image,flagCell = lambda row, col : False):
         data=self.data
         #make the line mesh
         for (rowI, row) in enumerate(data):
             for(colI, cell) in enumerate(row):
-                self.drawCell(rowI,colI,image)
+                self.drawCell(rowI,colI,image, flagCell=flagCell)
 
     #draws a given cell
-    def drawCell(self,rowI,colI,image):
+    def drawCell(self,rowI,colI,image, flagCell = lambda row, col : False):
         cell=self.getCell(rowI,colI)
         x, y = self.getXYFromRowCol(rowI,colI,image)
         spacingX,spacingY=self.getSpacingXSpacingY(image)
@@ -694,16 +752,21 @@ class SantaFeLattice:
             up=(x,int(y-spacingY/4))
 
             color=BLACK
+            lineWidth=1
+            if(flagCell(rowI,colI)):
+                color=RED
+                lineWidth=3
+
             tipLength=0.5
 
             if(cell.arrow=="up"):
-                image=cv2.arrowedLine(image,down,up,color,1,tipLength=tipLength)
+                image=cv2.arrowedLine(image,down,up,color,lineWidth,tipLength=tipLength)
             elif(cell.arrow=="down"):
-                image=cv2.arrowedLine(image,up,down,color,1,tipLength=tipLength)
+                image=cv2.arrowedLine(image,up,down,color,lineWidth,tipLength=tipLength)
             elif(cell.arrow=="left"):
-                image=cv2.arrowedLine(image,right,left,color,1,tipLength=tipLength)
+                image=cv2.arrowedLine(image,right,left,color,lineWidth,tipLength=tipLength)
             elif(cell.arrow=="right"):
-                image=cv2.arrowedLine(image,left,right,color,1,tipLength=tipLength)
+                image=cv2.arrowedLine(image,left,right,color,lineWidth,tipLength=tipLength)
         if(cell.dimer):
             cv2.circle(image,(x,y),2,RED,-1)
         if(cell.interiorCenter):
@@ -716,7 +779,9 @@ class SantaFeLattice:
             #cv2.rectangle(image,(int(x-4*spacingX),int(y-4*spacingY)),(int(x+4*spacingX),int(y+4*spacingY)),GREEN,1)
 
             #cv2.putText(image, str(cell.stringsInCompositeSquare), (x,y), cv2.FONT_HERSHEY_SIMPLEX,0.3, BLACK, 1, cv2.LINE_AA)
-        #cv2.putText(image, str(self.countArrowNeighbors(rowI,colI)), (x,y), cv2.FONT_HERSHEY_SIMPLEX,0.3, BLACK, 1, cv2.LINE_AA)
+        energy=self.getVertexEnergy(rowI,colI)
+        #if energy.par != 0 or energy.perp!=0:
+        #    cv2.putText(image, str(energy), (x,y), cv2.FONT_HERSHEY_SIMPLEX,0.2, BLACK, 1, cv2.LINE_AA)
 
     #gets a cell at a given rowI, colI and returns None if that coordinant is out of bounds of the array
     def getCell(self,rowI,colI):

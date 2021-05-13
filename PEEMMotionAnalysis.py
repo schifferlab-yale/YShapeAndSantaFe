@@ -4,7 +4,9 @@ import argparse
 import csv
 import numpy as np
 import cv2
+import os
 
+#returns pairs of strings which connect exactly the same sets of points
 def getNoChange(oldStrings,newStrings):
     noChange=[]
     for oldString in oldStrings:
@@ -19,7 +21,7 @@ def getWiggleGrowShrink(oldStrings,oldLattice,newStrings,newLattice):
     wiggle,grow,shrink=[],[],[]
 
 
-    pairs = getStringPairs(oldStrings, oldLattice, newStrings, newLattice)
+    pairs = getStringPairs(oldStrings, oldLattice, newStrings, newLattice)#pair up strings
 
     for pair in pairs:
         if(pair[0].getSegmentCount() == pair[1].getSegmentCount()):
@@ -33,16 +35,19 @@ def getWiggleGrowShrink(oldStrings,oldLattice,newStrings,newLattice):
     return wiggle,grow,shrink
 
 
-
+#returns a list of tuples of lists where each list contains strings that touch the exact same points
+#output [([oldStrings that touch these points],[newStrings that touch these points]), ([],[])]
 def groupByTouchingSquares(oldStrings,oldLattice,newStrings,newLattice):
 
+    #dictionary where key is the hash of the touching centers
     groups={}
 
     for newString in newStrings:
         
         touchingCenters=frozenset(newLattice.getTouchingCompositeSquares(newString))
         hashKey=hash(touchingCenters)
-        if hashKey not in groups:
+
+        if hashKey not in groups:#if this is a new hash, add to dict and check if there are others with this hash
             groups[hashKey]=([],[newString])
 
             for string in newStrings:
@@ -98,7 +103,7 @@ def matchupBySharedPoints(strings1, strings2):
 
     return pairs
 
-
+#pairs of strings into groups of 2
 def getStringPairs(oldStrings,oldLattice,newStrings,newLattice):
     pairs=[]
     groups=groupByTouchingSquares(oldStrings, oldLattice, newStrings, newLattice)
@@ -120,19 +125,20 @@ def getStringPairs(oldStrings,oldLattice,newStrings,newLattice):
 def getMerges(oldStrings,oldLattice,newStrings,newLattice):
     merges=[]
 
+    #loop through each new string and see if it can be made from two previous strings
     for potentialMerged in newStrings:
         mergedPoints=set(potentialMerged.getPoints())
 
-        bestCoverage=-1
+        bestCoverage=-1 #number of shared points from two other strings
         sources=[]
 
         for string1 in oldStrings:
             string1Points=set(string1.getPoints())
             string1CoveredPoints=mergedPoints.intersection(string1Points)
-            if len(string1CoveredPoints)==0:
+            if len(string1CoveredPoints)==0:#must have at least one shared point
                 continue
             for string2 in oldStrings:
-                if string1==string2:
+                if string1==string2:#must have at least one shared point
                     continue
                 string2Points=set(string2.getPoints())
                 string2CoveredPoints=mergedPoints.intersection(string2Points)
@@ -218,6 +224,21 @@ def latticeComparison(oldLattice,newLattice):
             oldStrings.remove(oldString)
             newStrings.remove(newString)
     
+    wiggleEnergyUnknownChange,wiggleEnergyIncrease,wiggleEnergyDecrease,wiggleNoEnergyChange=[],[],[],[]
+
+
+    for pair in wiggle:
+        change=newLattice.getStringEnergy(pair[1]).compare(oldLattice.getStringEnergy(pair[0]))
+
+        if change==0:
+            wiggleNoEnergyChange.append(pair)
+        elif(change==-1):
+            wiggleEnergyDecrease.append(pair)
+        elif(change==1):
+            wiggleEnergyIncrease.append(pair)
+        elif(change is None):
+            wiggleEnergyUnknownChange.append(pair)
+    
     #MERGE SPLIT ******************************************
 
     merge=getMerges(oldStrings,oldLattice,newStrings,newLattice)
@@ -235,8 +256,29 @@ def latticeComparison(oldLattice,newLattice):
         if splitStrings[1] in oldStrings:
             oldStrings.remove(splitStrings[1])
     
+
+    #if one is in a split and a merge, it is a reconnection
+
+    reconnection=[]
+    for merged in merge:
+        for splitStrings in split:
+            if merged[1] in splitStrings[0] and merged[1] not in reconnection:
+                reconnection.append(merged[1])
+                #merge.remove(merged)
+                #split.remove(splitStrings)
     
-    ##LOOPS
+    #remove reconnections from split and merge
+    merge=[merged for merged in merge if merged[1] not in reconnection]
+
+    for string in reconnection:
+        for splitString in split:
+            if string in splitString[0]:
+                split.remove(splitString)
+    
+    
+    
+    
+    ##LOOPS ********************************************
     loopWiggle, loopExpand, loopContract = getLoopWiggleExpandContract(oldStrings,oldLattice,newStrings,newLattice)
 
     for stringType in [loopWiggle,loopExpand,loopContract]:
@@ -265,9 +307,27 @@ def latticeComparison(oldLattice,newLattice):
     
 
 
-    return {"noChange":noChange, "wiggle":wiggle, "grow":grow, "shrink":shrink, "merge":merge,"split":split, "loopWiggle":loopWiggle, "loopExpand":loopExpand, "loopContract":loopContract, "loopCreation":loopCreation, "loopAnnihilation":loopAnnihilation, "stringCreation":stringCreation, "stringAnnihilation":stringAnnihilation}
+    return {
+        "noChange":noChange, 
+        "wiggleEnergyUnknownChange":wiggleEnergyUnknownChange,
+        "wiggleEnergyIncrease":wiggleEnergyIncrease,
+        "wiggleEnergyDecrease":wiggleEnergyDecrease,
+        "wiggleNoEnergyChange":wiggleNoEnergyChange, 
+        "grow":grow, 
+        "shrink":shrink, 
+        "merge":merge,
+        "split":split, 
+        "reconnection":reconnection,
+        "loopWiggle":loopWiggle, 
+        "loopExpand":loopExpand, 
+        "loopContract":loopContract, 
+        "loopCreation":loopCreation, 
+        "loopAnnihilation":loopAnnihilation, 
+        "stringCreation":stringCreation, 
+        "stringAnnihilation":stringAnnihilation
+        }
 
-def stringifyChanges(changes):
+def stringifyChanges(changes,oldLattice,newLattice):
     text="Changes from last slide:\n"
     #for noChange in changes["noChange"]:
     #    text+=str(noChange[0].id)+" no change\n"
@@ -276,17 +336,35 @@ def stringifyChanges(changes):
     for shrink in changes["shrink"]:
         text+=str(shrink[0])+"->"+str(shrink[1])+" shrunk\n"
 
-    for shrink in changes["wiggle"]:
-        text+=str(shrink[0])+"->"+str(shrink[1])+" wiggle\n"
+    for wiggle in changes["wiggleEnergyUnknownChange"]:
+        text+=str(wiggle[0])+"->"+str(wiggle[1])+" wiggle (unknown energy change)"
+        text+="\n"
 
-    for shrink in changes["grow"]:
-        text+=str(shrink[0])+"->"+str(shrink[1])+" grow\n"
+    for wiggle in changes["wiggleEnergyIncrease"]:
+        text+=str(wiggle[0])+"->"+str(wiggle[1])+" wiggle (energy increase)"
+        text+="\n"
+    
+    for wiggle in changes["wiggleEnergyDecrease"]:
+        text+=str(wiggle[0])+"->"+str(wiggle[1])+" wiggle (energy decrease)"
+        text+="\n"
+
+    for wiggle in changes["wiggleNoEnergyChange"]:
+        text+=str(wiggle[0])+"->"+str(wiggle[1])+" wiggle (no energy change)"
+        text+="\n"
+    
+    
+
+    for grow in changes["grow"]:
+        text+=str(grow[0])+"->"+str(grow[1])+" grow\n"
 
     for merge in changes["merge"]:
         text+=str(merge[0])+" merged into "+str(merge[1])+"\n"
 
     for split in changes["split"]:
         text+=str(split[1])+" split into "+str(split[0])+"\n"
+    
+    for reconnection in changes["reconnection"]:
+        text+=str(reconnection)+" reconnection \n"
 
     for wiggle in changes["loopWiggle"]:
         text+=str(wiggle[0])+"->"+str(wiggle[1])+" loop wiggle\n"
@@ -339,8 +417,10 @@ if __name__ == "__main__":
     lastLattice=None
     outImages=[]
 
+    motionCounts=None
+
     #loop through
-    for islandIndex,islands in enumerate(islandData[0:99]):
+    for islandIndex,islands in enumerate(islandData[0:100]):
         print(f"frame {islandIndex}")
         #turn PEEM data into a usable format for the santafelattice class
         rotated=rotatePEEM.rotatePEEM(rowData,colData,islands)
@@ -353,22 +433,68 @@ if __name__ == "__main__":
         outputImage=np.zeros((1000,1000,3), np.uint8)
         outputImage[:,:]=(250,250,250)
         lattice.drawStrings(outputImage,lineWidth=3,showID=True)
-        lattice.drawCells(outputImage)
+        lattice.drawCells(outputImage,flagCell = lambda row,col: lastLattice is not None and lattice.getCell(row,col).arrow != lastLattice.getCell(row,col).arrow)
 
 
         
 
-        outImages.append(outputImage)
+        
+        
 
         if lastLattice is not None:
             changes=latticeComparison(lastLattice,lattice)
 
-            for i, outLine in enumerate((stringifyChanges(changes)).split("\n")):
+            if(motionCounts is None):
+                motionCounts={}
+                for key in changes.keys():
+                    motionCounts[key]=0
+            
+            for key,val in changes.items():
+                motionCounts[key]+=len(val)
+            
+
+            for i, outLine in enumerate((stringifyChanges(changes,lastLattice,lattice)).split("\n")):
                 cv2.putText(outputImage, outLine, (10,700+i*15), cv2.FONT_HERSHEY_SIMPLEX,0.4, (0,0,0), 1, cv2.LINE_AA)
+            
+        
+
+            pastImage=np.zeros((1000,1000,3), np.uint8)
+            pastImage[:,:]=(250,250,250)
+            lastLattice.drawStrings(pastImage,lineWidth=10,showID=False)
+            lastLattice.drawCells(pastImage)
+            pastImage=cv2.cvtColor(pastImage, cv2.COLOR_BGR2GRAY)
+            _,pastImage=cv2.threshold(pastImage, 240, 255, cv2.THRESH_BINARY)
+            pastImage=cv2.cvtColor(pastImage, cv2.COLOR_GRAY2BGR)
+
+            
+            outputImage=cv2.addWeighted(outputImage,0.8,pastImage,0.2,0)
+
+        outImages.append(outputImage)
 
         lastLattice=lattice
-    
+
+    dirname = os.path.dirname(__file__)
+    directoryToCreate = os.path.join(dirname, "out",args.file)
+    try:
+        os.mkdir(directoryToCreate)
+    except FileExistsError:
+        pass
+
     #draw images
     for i, image in enumerate(outImages):
-        cv2.imwrite("out/"+str(i)+".jpg", np.float32(image))
+        cv2.imwrite("out/"+args.file+"/"+str(i)+".jpg", np.float32(image))
+    
+    
+    with open("out/out.txt","a") as file:
+        
+       file.write("\n"+args.file+"\n")
+       motionTotal=0;
+       for key, value in motionCounts.items():
+            if key != "noChange":
+                motionTotal+=value
+       for key,value in motionCounts.items():
+            if key == "noChange":
+                file.write(str(key)+": "+str(value)+"\n")
+            else:
+                file.write(str(key)+": "+str(value)+"/"+str(motionTotal)+"\n")
     
