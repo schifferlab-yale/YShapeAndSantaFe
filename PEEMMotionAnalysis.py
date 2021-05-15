@@ -202,7 +202,68 @@ def getLoopWiggleExpandContract(oldStrings,oldLattice,newStrings,newLattice):
 
     return wiggle, expand, contract
 
+def getStringsSharingPoint(string,otherStrings,minShared=1):
+    out=[]
+    for otherString in otherStrings:
+        sharedPoints=set(string.getPoints()).intersection(set(otherString.getPoints()))
+        if(len(sharedPoints)>=minShared):
+            out.append(otherString)
+    return out
+        
 
+def getReconnection(oldStrings,oldLattice,newStrings,newLattice):
+    oldStrings=[string for string in oldStrings]
+    newStrings=[string for string in newStrings]
+
+    reconnections=[]
+    for oldString1 in oldStrings:
+        potentialReconnects1=getStringsSharingPoint(oldString1,newStrings)
+        for oldString2 in oldStrings:
+            if(oldString1==oldString2):
+                continue
+        
+            potentialReconnects2=getStringsSharingPoint(oldString2,newStrings)
+
+            #now we have a set of new strings which share a point with two of the old strings
+            potentialReconnects=set(potentialReconnects1).intersection(potentialReconnects2)
+
+            #make sure that the point that they share is NOT the same
+            
+            for potentialReconnect in list(potentialReconnects):
+                sharedPoints1=set(potentialReconnect.getPoints()).intersection(set(oldString1.getPoints()))
+                sharedPoints2=set(potentialReconnect.getPoints()).intersection(set(oldString2.getPoints()))
+    
+                if len(sharedPoints1.union(sharedPoints2))<2:
+                    potentialReconnects.remove(potentialReconnect)
+            
+
+            validReconnect=True
+
+            #make sure the new strings do not touch
+            for reconnect1 in potentialReconnects:
+                for reconnect2 in potentialReconnects:
+                    if(reconnect1==reconnect2):
+                        continue
+                    if len(set(reconnect1.getPoints()).intersection(set(reconnect2.getPoints())))!=0:
+                        validReconnect=False
+
+            #make sure we have at least two strings as a result
+            
+            if(len(potentialReconnects)<2):
+                validReconnect=False
+            
+            
+
+            if(validReconnect):
+                reconnections.append(([oldString1,oldString2],list(potentialReconnects)))
+                oldStrings.remove(oldString1)
+                oldStrings.remove(oldString2)
+                newStrings=[string for string in newStrings if string not in potentialReconnects]
+
+
+
+
+    return reconnections
 
 def latticeComparison(oldLattice,newLattice):
     oldStrings=[string for string in oldLattice.strings]
@@ -215,6 +276,16 @@ def latticeComparison(oldLattice,newLattice):
     for oldString, newString in noChange:
         oldStrings.remove(oldString)
         newStrings.remove(newString)
+
+    #RECONNECTION*********************************
+
+    reconnection=getReconnection(oldStrings,oldLattice,newStrings,newLattice)
+
+    for pair in reconnection:
+        for oldString in pair[0]:
+            oldStrings.remove(oldString)
+        for newString in pair[1]:
+            newStrings.remove(newString)
 
     #WIGGLE GROW SHRINK **************************
     wiggle,grow,shrink=getWiggleGrowShrink(oldStrings,oldLattice,newStrings,newLattice)
@@ -259,13 +330,13 @@ def latticeComparison(oldLattice,newLattice):
 
     #if one is in a split and a merge, it is a reconnection
 
-    reconnection=[]
-    for merged in merge:
+    #reconnection=[]
+    """for merged in merge:
         for splitStrings in split:
             if merged[1] in splitStrings[0] and merged[1] not in reconnection:
                 reconnection.append(merged[1])
                 #merge.remove(merged)
-                #split.remove(splitStrings)
+                #split.remove(splitStrings)"""
     
     #remove reconnections from split and merge
     merge=[merged for merged in merge if merged[1] not in reconnection]
