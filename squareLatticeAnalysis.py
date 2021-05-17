@@ -1,3 +1,8 @@
+"""
+This is a file meant to read data from a square lattice MFM sample. Make sure that the nodeNetwork file is available for it to use.
+"""
+
+
 import cv2
 import matplotlib.pyplot as plt
 import math
@@ -28,7 +33,9 @@ RED=(0,0,255)
 
 
 class SquareNodeNetwork(NodeNetwork):
-    def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight):
+
+    #this will return the four points inside a square
+    def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight,row=0,col=0):
         #multiplier for how far the sample points are from the edge of the square
         shiftConstant=0.25
 
@@ -50,6 +57,8 @@ class SquareNodeNetwork(NodeNetwork):
 
         fourSamplePoints=[topSamplePoint,leftSamplePoint,rightSamplePoint,bottomSamplePoint]
         return fourSamplePoints
+    
+    #this shows when two sides are both black/white which means the data is being read wrong
     def hasError(self, samplePoints, rowI, vertexI, pointI):
         if pointI==0 or pointI==1:
             return False
@@ -67,9 +76,11 @@ class SquareNodeNetwork(NodeNetwork):
                 if(vertex[3][2] == samplePoints[rowI+1][vertexI][0][2]):
                     return True
         return False
+
+    
     def drawData(self,im):
         if not self.dragging:
-            samplePoints=self.getSamplePoints()
+            samplePoints=self.samplePoints
 
             height, width, channels = im.shape
 
@@ -169,7 +180,7 @@ def show():
 
 
 
-
+lastMouse=(0,0)
 def mouse_event(event, x, y,flags, param):
     if event == cv2.EVENT_RBUTTONDOWN:
         n.splitAtClosestPoint(x,y)
@@ -180,14 +191,30 @@ def mouse_event(event, x, y,flags, param):
         n.updateDragging(x,y)
     elif event==cv2.EVENT_LBUTTONUP:
         n.dragging=False
+        n.setSamplePoints()
     elif event == cv2.EVENT_RBUTTONDOWN:
         pass
-
+    lastMouse=(x,y)
     show()
 
 show();
 cv2.setMouseCallback('window', mouse_event)
-cv2.waitKey(0)
+#TODO add a button to cycle a point (correct errors manually)
+while True:
+    key=cv2.waitKey(0)
+    if(key==ord("\r")):
+        break;
+    elif(key==ord("r")):
+        n.addRow()
+    elif(key==ord("e")):
+        n.removeRow()
+
+    elif(key==ord("c")):
+        n.addCol()
+    elif(key==ord("x")):
+        n.removeCol()
+    
+    show()
 
 with open('output.csv', 'w') as file:
     file.write(n.dataAsString())

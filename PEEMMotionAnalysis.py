@@ -260,6 +260,8 @@ def getReconnection(oldStrings,oldLattice,newStrings,newLattice):
                 oldStrings.remove(oldString2)
                 newStrings=[string for string in newStrings if string not in potentialReconnects]
 
+                break #break out of the second string loop since the first string has already been classified
+
 
 
 
@@ -461,19 +463,15 @@ def stringifyChanges(changes,oldLattice,newLattice):
     
     return text
 
-if __name__ == "__main__":
-    #get file from args
-    parser = argparse.ArgumentParser(description='Peem analysis')
-    parser.add_argument("file", type=str, help="Path to csv file")
-    args=parser.parse_args()
 
-    #open file
+def analyzeFile(fileName):
+     #open file
     try:
-        file=open(args.file,newline="\n")
+        file=open(fileName,newline="\n")
     except:
         raise Exception("Error with file")
 
-    with open(args.file, newline='') as f:
+    with open(fileName, newline='') as f:
         reader = csv.reader(f)
         data = list(reader)
 
@@ -491,7 +489,7 @@ if __name__ == "__main__":
     motionCounts=None
 
     #loop through
-    for islandIndex,islands in enumerate(islandData[0:100]):
+    for islandIndex,islands in enumerate(islandData[0:5]):
         print(f"frame {islandIndex}")
         #turn PEEM data into a usable format for the santafelattice class
         rotated=rotatePEEM.rotatePEEM(rowData,colData,islands)
@@ -506,11 +504,9 @@ if __name__ == "__main__":
         lattice.drawStrings(outputImage,lineWidth=3,showID=True)
         lattice.drawCells(outputImage,flagCell = lambda row,col: lastLattice is not None and lattice.getCell(row,col).arrow != lastLattice.getCell(row,col).arrow)
 
-
-        
-
-        
-        
+        blank=np.zeros((1000,1000,3), np.uint8)
+        blank[:,:]=(250,250,250)
+        outputImage=np.concatenate((outputImage,blank), axis=0)
 
         if lastLattice is not None:
             changes=latticeComparison(lastLattice,lattice)
@@ -523,9 +519,10 @@ if __name__ == "__main__":
             for key,val in changes.items():
                 motionCounts[key]+=len(val)
             
+            
 
             for i, outLine in enumerate((stringifyChanges(changes,lastLattice,lattice)).split("\n")):
-                cv2.putText(outputImage, outLine, (10,700+i*15), cv2.FONT_HERSHEY_SIMPLEX,0.4, (0,0,0), 1, cv2.LINE_AA)
+                cv2.putText(outputImage, outLine, (10,900+i*15), cv2.FONT_HERSHEY_SIMPLEX,0.4, (0,0,0), 1, cv2.LINE_AA)
             
         
 
@@ -536,7 +533,7 @@ if __name__ == "__main__":
             pastImage=cv2.cvtColor(pastImage, cv2.COLOR_BGR2GRAY)
             _,pastImage=cv2.threshold(pastImage, 240, 255, cv2.THRESH_BINARY)
             pastImage=cv2.cvtColor(pastImage, cv2.COLOR_GRAY2BGR)
-
+            pastImage=np.concatenate((pastImage,blank), axis=0)
             
             outputImage=cv2.addWeighted(outputImage,0.8,pastImage,0.2,0)
 
@@ -544,8 +541,18 @@ if __name__ == "__main__":
 
         lastLattice=lattice
 
+    return motionCounts, outImages
+
+if __name__ == "__main__":
+    #get file from args
+    parser = argparse.ArgumentParser(description='Peem analysis')
+    parser.add_argument("file", type=str, help="Path to csv file")
+    args=parser.parse_args()
+
+    motionCounts, outImages = analyzeFile(args.file)
+
     dirname = os.path.dirname(__file__)
-    directoryToCreate = os.path.join(dirname, "out",args.file)
+    directoryToCreate = os.path.join(dirname, "out",args.file.split("\\")[-1])
     try:
         os.mkdir(directoryToCreate)
     except FileExistsError:
@@ -553,7 +560,7 @@ if __name__ == "__main__":
 
     #draw images
     for i, image in enumerate(outImages):
-        cv2.imwrite("out/"+args.file+"/"+str(i)+".jpg", np.float32(image))
+        cv2.imwrite("out/"+args.file.split("\\")[-1]+"/"+str(i)+".jpg", np.float32(image))
     
     
     with open("out/out.txt","a") as file:

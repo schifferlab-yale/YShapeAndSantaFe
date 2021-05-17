@@ -1,3 +1,14 @@
+"""
+This file contains the class NodeNetwork which is meant to be an abstract class to contain a network of points over an image.
+The class is given an image, 4 corners of a quadrangle, and a number of rows and columns, it then creates a grid over the image of sample points.
+You must implement the method getSamplePointsFromSquare() in order to get the sample points to show up in the image.
+One "square" should generally be a small repeatable unit for the pattern of the sample. (e.g. one island cluster, one island, etc)
+
+Once the grid is created, it can be split at a given row/col in order to create another "fixed point" which can be moved around.
+The NodeNetwork will interpolate a grid between every quadrangle of four fixed points, allowing flexibility for a user to account for distortion in an image.
+The output of the nodenetwork will generally just be reading the color of each of the sample points.
+"""
+
 import cv2
 import numpy as np
 import math
@@ -18,10 +29,6 @@ def dist(point1, point2):
 def getIntermediate(point1,point2,percent):
     return [(point2[0]-point1[0])*percent+point1[0], (point2[1]-point1[1])*percent+point1[1]]
 
-
-#Gets the color of an area on the screen at (x,y)
-#It will look at every pixel within a certain with of the specified point and then
-#average their values
 
 
 #Basic class to hold an x and y value
@@ -49,7 +56,7 @@ def xyArrayToIntTuple(arr):
 class NodeNetwork:
     def __init__(self,topLeft,topRight,bottomLeft,bottomRight,rows, cols, image):
         self.image=image;
-        #how far around the pixel to look
+        #how far around the pixel to look when determining the color of a point
         self.pointSampleWidth=5
         self.bwImage=self.makeBWImage(image)
 
@@ -84,6 +91,8 @@ class NodeNetwork:
         #array of stored samplepoints
         self.samplePoints=[]
         self.setSamplePoints()
+    
+    #turn an image black and white so that it can be easily sampled to find the color of a point
     def makeBWImage(self,image):
         avg_color_per_row = np.average(image, axis=0)
         avg_color = np.average(avg_color_per_row, axis=0)
@@ -105,6 +114,8 @@ class NodeNetwork:
         return count
 
 
+    #this is an experimental function to move around a fixed point in order to minimize the number of errors
+    #it does not work too well in practice
     def jiggleNearestFixedPoint(self,x,y):
 
         fixedPoint=self.getNearestFixedPoint(x,y)
@@ -128,7 +139,7 @@ class NodeNetwork:
         self.setSamplePoints()
 
 
-
+    #draws the current grid onto an image
     def draw(self,im):
 
         #draw all fixed points
@@ -191,6 +202,7 @@ class NodeNetwork:
                             im=cv2.circle(im,(int(point[0]),int(point[1])),5,GREEN,2)
 
 
+    #given a given row, vertex, point. Determine if there is an error or not
     def hasError(self, samplePoints, rowI, vertexI, pointI):
         raise Exception("You need to define this function")
 
@@ -236,7 +248,10 @@ class NodeNetwork:
                         grid[point["row"]+rowI][point["col"]+colI]=[pointX,pointY]
         return grid
 
+    #given an x, y. Find whether that point in the image should be considered black or white
     def sampleImageColor(self,im,x,y):
+        #originally this function would average every time (see commented out code below)
+        #now it just generates a blurred black and white image in the beginning which provides much better performance
         return self.blurredImage[int(y)][int(x)][0]
         """avg=0;
         count=0;#number of pixels checked
@@ -263,6 +278,8 @@ class NodeNetwork:
         #return avg color
         avg/=count;
         return avg"""
+    
+    #same as sampling a color but only returns 1 or -1
     def sampleImage(self,x,y):
         color=self.BWImage[int(y)][int(x)][0]
         if(color>127):
@@ -297,7 +314,7 @@ class NodeNetwork:
     def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight,row=0):
         raise Exception("You need to define this function")
 
-
+    #given an x,y find the nearest sample point and cycle it between black/white/error states
     def toggleNearestSamplePoint(self,x,y):
         closestPoint=None
 
@@ -435,6 +452,8 @@ class NodeNetwork:
                         else:
                             color=BLACK
                         im=cv2.circle(im, (int(point[0]),int(point[1])), 3, color, -1)
+    
+    #spit out all the point data. Generally it is better to  reemplement this in the subclass
     def dataAsString(self):
         string=""
         for (rowI, row) in enumerate(self.samplePoints):

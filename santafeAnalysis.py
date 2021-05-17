@@ -1009,14 +1009,17 @@ class SantaFeLattice:
                 if(cell.center and self.isInteriorCenter(rowI, colI)):
                     if(self.getCell(rowI+2,colI).center and  self.isInteriorCenter(rowI+2, colI)):
 
+                        rowOff=(colI%16>=8)
+                        colOff=((rowI+1)%16>=8) 
 
 
-                        centerRowCount[(rowI+1 +(colI%16>=8)*8 )%16]+=1
-                        centerColCount[(colI +(rowI%16>=8)*0 )%16  ]+=1
+
+                        centerRowCount[((rowI+1) +rowOff*8 )%16]+=1
+                        centerColCount[((colI) +colOff*8 )%8  ]+=1
                     elif(self.getCell(rowI,colI+2).center and self.isInteriorCenter(rowI, colI+2)):
-                        continue
-                        centerRowCount[(rowI)%16]+=1
-                        centerColCount[(colI+1)%16]+=1
+                        pass
+                        #centerRowCount[((rowI) +((colI+1)%16>=8)*8 )%16]+=1
+                        #centerColCount[((colI+1) +((rowI)%16>=8)*8 )%16  ]+=1
         
         rowChoice=-1
         rowMaxCount=-1
@@ -1033,6 +1036,7 @@ class SantaFeLattice:
             if(count>colMaxCount):
                 colChoice=i
                 colMaxCount=count
+        
 
         return (rowChoice-16, colChoice-16)
 
