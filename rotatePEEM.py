@@ -7,7 +7,7 @@ import math
 
 
 
-
+#Given 3 1-d arrays the row index, the col index, and the island value convert into a normal 2d array
 def coordsToArray(row,col,islands):
     assert(len(row)==len(col) and len(col)==len(islands))
     row=np.array(row)
@@ -23,6 +23,7 @@ def coordsToArray(row,col,islands):
 
     return data
 
+#rotate an array by 45 degrees counterclockwise
 def rotate45(data):
     numRows=len(data)
     numCols=len(data[0])
@@ -42,6 +43,7 @@ def rotate45(data):
 
     return list(rotated)
 
+#the rows get flipped based on the weird data format
 def fixOrientation(data):
     for (rowI, row) in enumerate(data):
         for(colI, val) in enumerate(row):
@@ -68,7 +70,6 @@ def exportToString(data):
 
 def rotatePEEM(row, col, islands):
     islandData=coordsToArray(row,col,islands)
-    #islandData=np.array([[0,1,2,3,4,5],[6,7,8,9,10,11],[12,13,14,15,16,17]])
     islandData=rotate45(islandData)
     islandData=fixOrientation(islandData)
     return exportToString(islandData)

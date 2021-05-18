@@ -16,7 +16,7 @@ def getNoChange(oldStrings,newStrings):
     
     return noChange
 
-#Assume that duplicate strings have already been removed
+#pair up strings and return by size change
 def getWiggleGrowShrink(oldStrings,oldLattice,newStrings,newLattice):
     wiggle,grow,shrink=[],[],[]
 
@@ -62,6 +62,7 @@ def groupByTouchingSquares(oldStrings,oldLattice,newStrings,newLattice):
     
     return list(groups.values())
 
+#tries to match up strings by number of shared points (algorithm is not perfect)
 def matchupBySharedPoints(strings1, strings2):
     #the principle for this is that we will loop through the shorter list and find each elements best pair from teh longer list
 
@@ -103,7 +104,7 @@ def matchupBySharedPoints(strings1, strings2):
 
     return pairs
 
-#pairs of strings into groups of 2
+#pairs of strings into groups of 2 based on number of shared paints
 def getStringPairs(oldStrings,oldLattice,newStrings,newLattice):
     pairs=[]
     groups=groupByTouchingSquares(oldStrings, oldLattice, newStrings, newLattice)
@@ -122,6 +123,8 @@ def getStringPairs(oldStrings,oldLattice,newStrings,newLattice):
 
     return pairs    
 
+
+#if a new string shares at least 1 point with each of two old strings
 def getMerges(oldStrings,oldLattice,newStrings,newLattice):
     merges=[]
 
@@ -138,18 +141,18 @@ def getMerges(oldStrings,oldLattice,newStrings,newLattice):
             if len(string1CoveredPoints)==0:#must have at least one shared point
                 continue
             for string2 in oldStrings:
-                if string1==string2:#must have at least one shared point
+                if string1==string2:#cannot merge a string with itself!
                     continue
                 string2Points=set(string2.getPoints())
                 string2CoveredPoints=mergedPoints.intersection(string2Points)
-                if(len(string2CoveredPoints)==0):
+                if(len(string2CoveredPoints)==0):#must cover at least one point
                     continue
                 totalCoveredPoints=len(string1CoveredPoints.union(string2CoveredPoints))
                 if(totalCoveredPoints>bestCoverage):
                     bestCoverage=totalCoveredPoints
                     sources=[string1,string2]
         
-        if(bestCoverage>1):
+        if(bestCoverage>1):#this will always be true if we found a matching pair
             merges.append((sources,potentialMerged))
 
 
@@ -182,6 +185,7 @@ def getMerges(oldStrings,oldLattice,newStrings,newLattice):
 
     return merges
 
+#matchup loops and return based on segment count
 def getLoopWiggleExpandContract(oldStrings,oldLattice,newStrings,newLattice):
     oldLoops = [string for string in oldStrings if string.isLoop()]
     newLoops = [string for string in newStrings if string.isLoop()]
@@ -202,6 +206,7 @@ def getLoopWiggleExpandContract(oldStrings,oldLattice,newStrings,newLattice):
 
     return wiggle, expand, contract
 
+#get all the strings in the second argument which share at least n points with the first string
 def getStringsSharingPoint(string,otherStrings,minShared=1):
     out=[]
     for otherString in otherStrings:
@@ -210,6 +215,8 @@ def getStringsSharingPoint(string,otherStrings,minShared=1):
             out.append(otherString)
     return out
         
+
+#if two strings in the old lattice share at least two seperate points with strings in the new lattice and do not touch
 
 def getReconnection(oldStrings,oldLattice,newStrings,newLattice):
     oldStrings=[string for string in oldStrings]
@@ -315,7 +322,7 @@ def latticeComparison(oldLattice,newLattice):
     #MERGE SPLIT ******************************************
 
     merge=getMerges(oldStrings,oldLattice,newStrings,newLattice)
-    split=getMerges(newStrings,newLattice,oldStrings,oldLattice)
+    split=getMerges(newStrings,newLattice,oldStrings,oldLattice)#splits are just merges in the reverse direction
     for merged in merge:
         for source in merged[0]:
             if source in oldStrings:
@@ -359,7 +366,7 @@ def latticeComparison(oldLattice,newLattice):
             oldStrings.remove(oldString)
             newStrings.remove(newString)
     
-    #Creation/annihilation
+    #Creation/annihilation (everything left over)
 
     loopCreation=[]
     loopAnnihilation=[]
@@ -489,7 +496,7 @@ def analyzeFile(fileName):
     motionCounts=None
 
     #loop through
-    for islandIndex,islands in enumerate(islandData[0:5]):
+    for islandIndex,islands in enumerate(islandData[0:15]):
         print(f"frame {islandIndex}")
         #turn PEEM data into a usable format for the santafelattice class
         rotated=rotatePEEM.rotatePEEM(rowData,colData,islands)
@@ -497,6 +504,10 @@ def analyzeFile(fileName):
 
         #create lattice
         lattice=santafeAnalysis.SantaFeLattice(rotated, removeEdgeStrings=False, autoAlignCenters=True)
+
+        #make sure it is not blank
+        if(lattice.isBlank()):
+            continue
 
         #draw output
         outputImage=np.zeros((1000,1000,3), np.uint8)

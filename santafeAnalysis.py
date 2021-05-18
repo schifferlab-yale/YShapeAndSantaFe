@@ -991,6 +991,23 @@ class SantaFeLattice:
         for (rowI, row) in enumerate(data):
             for(colI, cell) in enumerate(row):
                 cell.dimer=self.isDimer(rowI,colI)
+    
+    def countArrows(self):
+        total=0
+        data=self.data
+        for (rowI, row) in enumerate(data):
+            for(colI, cell) in enumerate(row):
+                if(cell.hasArrow):
+                    total+=1
+        return total
+    
+    def isBlank(self):
+        data=self.data
+        for (rowI, row) in enumerate(data):
+            for(colI, cell) in enumerate(row):
+                if(cell.hasArrow):
+                    return False
+        return True
 
     #just find all centers and update that in the cell object
     def updateCenters(self):

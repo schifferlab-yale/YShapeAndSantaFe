@@ -3,8 +3,10 @@ import glob, os, cv2
 import numpy as np
 
 if __name__=="__main__":
+    folder="Nov_2020_adjust_"
+
     curDir=os.path.dirname(__file__)
-    files = glob.glob(curDir + '/PEEMFiles/**/*.csv', recursive=True)
+    files = glob.glob(curDir + '/'+folder+'/**/*.csv', recursive=True)
 
     motionKeys=[]
 
@@ -12,7 +14,7 @@ if __name__=="__main__":
         for (fileI, file) in enumerate(files):
             print(f"({fileI+1}/{len(files)}) {file}")
 
-            relativePath=file.split("PEEMFiles")[1]
+            relativePath=file.split(folder)[1]
 
 
             motionCounts,outImages = analyzeFile(file)
@@ -26,7 +28,7 @@ if __name__=="__main__":
                     outFile.write(key+", ")
                 outFile.write("\n")
             
-            outFile.write(file.split("PEEMFiles\\")[1]+", ")
+            outFile.write(file.split(folder+"\\")[1]+", ")
             for key in motionKeys:
                 outFile.write(str(motionCounts[key])+", ")
             outFile.write("\n")

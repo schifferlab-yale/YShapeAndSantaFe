@@ -17,6 +17,8 @@ parser.add_argument("-t", "--trim", help="Set if the offset row is shorter than 
 parser.add_argument("-a", "--reference_image", help="image of the height(to help line up the sample points)", type=str)
 args=parser.parse_args()
 
+
+#read image and reference image
 try:
     image = cv2.imread(args.image[0])
     image = cv2.resize(image, (1000,1000))
