@@ -3,7 +3,7 @@ import glob, os, cv2
 import numpy as np
 
 if __name__=="__main__":
-    folder="Nov_2020_adjust_"
+    folder="PEEMFiles"
 
     curDir=os.path.dirname(__file__)
     files = glob.glob(curDir + '/'+folder+'/**/*.csv', recursive=True)
@@ -16,28 +16,30 @@ if __name__=="__main__":
 
             relativePath=file.split(folder)[1]
 
+            try:
+                motionCounts,outImages,_ = analyzeFile(file,debug=False,maxFrame=15)
 
-            motionCounts,outImages = analyzeFile(file)
 
-
-            #TEXT
-            if(fileI==0):
-                motionKeys=motionCounts.keys()
-                outFile.write("file name, ")
+                #TEXT
+                if(fileI==0):
+                    motionKeys=motionCounts.keys()
+                    outFile.write("file name, ")
+                    for key in motionKeys:
+                        outFile.write(key+", ")
+                    outFile.write("\n")
+                
+                outFile.write(file.split(folder+"\\")[1]+", ")
                 for key in motionKeys:
-                    outFile.write(key+", ")
+                    outFile.write(str(motionCounts[key])+", ")
                 outFile.write("\n")
-            
-            outFile.write(file.split(folder+"\\")[1]+", ")
-            for key in motionKeys:
-                outFile.write(str(motionCounts[key])+", ")
-            outFile.write("\n")
 
-            #IMAGES
-            
-            outDir=curDir+"\out"+relativePath+"/"
+                #IMAGES
+                
+                outDir=curDir+"\out"+relativePath+"/"
 
-            os.makedirs(outDir, exist_ok=True)
-            
-            for i,file in enumerate(outImages):
-                cv2.imwrite(outDir+str(i)+".jpg", np.float32(file))
+                os.makedirs(outDir, exist_ok=True)
+                
+                for i,file in enumerate(outImages):
+                    cv2.imwrite(outDir+str(i)+".jpg", np.float32(file))
+            except Exception:
+                print("ERROR")

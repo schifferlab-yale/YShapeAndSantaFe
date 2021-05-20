@@ -2,5 +2,6 @@
 out/*
 *.pyc
 AllSantaFeResults/*
+AllSantaFeResults-old/*
 PEEMFiles/*
 out.zip

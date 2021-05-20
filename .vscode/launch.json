@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["SFshort_700_280K#_SFspin_clustering_total.csv"]
+            "args": ["Nov_2020_adjust_\\Nov_2020_adjust\\600short\\600short_250K#_SF_adjustspin_clustering_total.csv"]
         }
     ]
 }
