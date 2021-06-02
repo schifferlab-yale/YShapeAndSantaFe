@@ -130,7 +130,7 @@ def getStringPairs(oldStrings,oldLattice,newStrings,newLattice):
     return pairs    
 
 
-#if a new string shares at least 1 point with each of two old strings
+#if a new string shares at least 2 points with at least two old strings
 def getMerges(oldStrings,oldLattice,newStrings,newLattice):
     merges=[]
 
@@ -138,6 +138,8 @@ def getMerges(oldStrings,oldLattice,newStrings,newLattice):
     for potentialMerged in newStrings:
         mergedPoints=set(potentialMerged.getPoints())
 
+        #old method that would only use two strings for a merge
+        """
         bestCoverage=-1 #number of shared points from two other strings
         sources=[]
 
@@ -160,6 +162,17 @@ def getMerges(oldStrings,oldLattice,newStrings,newLattice):
         
         if(bestCoverage>1):#this will always be true if we found a matching pair
             merges.append((sources,potentialMerged))
+        """
+
+        sources=[]
+        for string in oldStrings:
+            points=set(string.getPoints())
+            if len(points.intersection(mergedPoints))>=2:
+                sources.append(string)
+        
+        if(len(sources)>=2):
+            merges.append((sources,potentialMerged))
+
 
 
 
@@ -378,19 +391,27 @@ def latticeComparison(oldLattice,newLattice):
 
     loopCreation=[]
     loopAnnihilation=[]
-    stringCreation=[]
-    stringAnnihilation=[]
+    centerStringCreation=[]
+    centerStringAnnihilation=[]
+    edgeStringCreation=[]
+    edgeStringAnnihilation=[]
 
     for string in oldStrings:
         if string.isLoop():
             loopAnnihilation.append(string)
+        elif len(string.getPoints())==3 and len(oldLattice.getTouchingInteriors(string))==2:
+            centerStringAnnihilation.append(string)
         else:
-            stringAnnihilation.append(string)
+            edgeStringAnnihilation.append(string)
+
+
     for string in newStrings:
         if string.isLoop():
             loopCreation.append(string)
+        elif len(string.getPoints())==3 and len(newLattice.getTouchingInteriors(string))==2:
+            centerStringCreation.append(string)
         else:
-            stringCreation.append(string)
+            edgeStringCreation.append(string)
 
     
 
@@ -411,8 +432,10 @@ def latticeComparison(oldLattice,newLattice):
         "loopContract":loopContract, 
         "loopCreation":loopCreation, 
         "loopAnnihilation":loopAnnihilation, 
-        "stringCreation":stringCreation, 
-        "stringAnnihilation":stringAnnihilation
+        "centerStringCreation":centerStringCreation, 
+        "centerStringAnnihilation":centerStringAnnihilation,
+        "edgeStringCreation":edgeStringCreation,
+        "edgeStringAnnihilation":edgeStringAnnihilation,
         }
 
 def stringifyChanges(changes,oldLattice,newLattice):
@@ -469,11 +492,17 @@ def stringifyChanges(changes,oldLattice,newLattice):
     for string in changes["loopAnnihilation"]:
         text+="loop "+str(string)+" annihilated\n"
 
-    for string in changes["stringCreation"]:
-        text+=str(string)+" created\n"
+    for string in changes["edgeStringCreation"]:
+        text+="edge "+str(string)+" created\n"
     
-    for string in changes["stringAnnihilation"]:
-        text+=str(string)+" annihilated\n"
+    for string in changes["edgeStringAnnihilation"]:
+        text+="edge "+str(string)+" annihilated\n"
+
+    for string in changes["centerStringCreation"]:
+        text+="center "+str(string)+" created\n"
+    
+    for string in changes["centerStringAnnihilation"]:
+        text+="center "+str(string)+" annihilated\n"
     
     
     return text
@@ -546,8 +575,21 @@ def analyzeFile(fileName,minFrame=0,maxFrame=-1,debug=False):
             allMotions.append(changes)
             
             
-
-            for i, outLine in enumerate((stringifyChanges(changes,lastLattice,lattice)).split("\n")):
+            #this splits it into lines
+            lineLength=60
+            lines=(stringifyChanges(changes,lastLattice,lattice)).split("\n")
+            i=0
+            while(i<len(lines)):
+                line=lines[i]
+                while(len(line)>lineLength):
+                    lines.insert(i,line[:lineLength])
+                    line=line[lineLength:]
+                    i+=1
+                    lines[i]=line
+                    
+                
+                i+=1
+            for i, outLine in enumerate(lines):
                 cv2.putText(outputImage, outLine, (1000,15+i*15), cv2.FONT_HERSHEY_SIMPLEX,0.4, (0,0,0), 1, cv2.LINE_AA)
             
         

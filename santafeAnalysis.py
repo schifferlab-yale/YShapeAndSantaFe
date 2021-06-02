@@ -12,6 +12,7 @@ import csv
 
 
 #constants
+#cv2 stores colors as BGR, not RGB
 WHITE=(255,255,255)
 BLACK=(0,0,0)
 GREEN=(0,255,0)
@@ -20,6 +21,7 @@ RED=(0,0,255)
 GREY=(127,127,127)
 
 
+#a simple class to store a vertex energy based by counting paralell and perpendicular interations
 class VertexEnergy:
     def __init__(self,par,perp):
         self.par=par
@@ -329,6 +331,7 @@ class String():
 
         return (xSum/totalMass, ySum/totalMass)
 
+    #returns all (row,col) points in the string with no duplicates
     def getPoints(self):
         points=[]
         for segment in self.lineSegments:
@@ -336,6 +339,7 @@ class String():
         
         return list(set(points))#this removes duplicates
 
+    #just sums the length of each line segement
     def getLength(self):
         length=0;
         for line in self.lineSegments:
@@ -345,7 +349,9 @@ class String():
     def getSegmentCount(self):
         return len(self.lineSegments)
 
-
+    #returns a "graph" which is an array where each position contains indices to the other
+    #other points in the array it connects to. This is used for figuring out if it is a loop 
+    #or not
     def asGraph(self):
         points=self.getPoints()
         graph=[[] for point in points]
