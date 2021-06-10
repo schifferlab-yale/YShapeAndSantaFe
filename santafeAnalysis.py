@@ -21,30 +21,6 @@ RED=(0,0,255)
 GREY=(127,127,127)
 
 
-#a simple class to store a vertex energy based by counting paralell and perpendicular interations
-class VertexEnergy:
-    def __init__(self,par,perp):
-        self.par=par
-        self.perp=perp
-    def __repr__(self):
-        return f"{self.par}|| + {self.perp}x"
-    
-    def __add__(self,other):
-        return VertexEnergy(self.par+other.par,self.perp+other.perp)
-    
-    def __eq__(self,other):
-        return other.par==self.par and other.perp == self.perp
-    
-    def compare(self,other):
-        if(self==other):
-            return 0
-        if(self.par>other.par and self.perp>=other.perp or self.par>= other.par and self.perp>other.perp):
-            return 1
-        if(other.par>self.par and other.perp>=self.perp or other.par>=self.par and other.perp>self.perp):
-            return -1
-        if(other.par>self.par and other.perp<self.perp or other.par<self.par and other.perp>self.perp):
-            return None #can't tell which one is bigger
-        raise Exception("all cases should be caught")
 
 
 #just shifts every element in an array by one and loops the last one back to the front
@@ -395,9 +371,10 @@ class Cell:
 
 #main class for holding the lattice
 class SantaFeLattice:
-    def __init__(self,csvFile,firstCenter=None,removeEdgeStrings=True,autoAlignCenters=False, randomizeStringColor=False):
+    def __init__(self,csvFile,firstCenter=None,removeEdgeStrings=True,autoAlignCenters=False, randomizeStringColor=False,vertexEnergies=None):
 
         self.randomizeStringColor=randomizeStringColor
+        self.vertexEnergies=vertexEnergies
 
         #csvread the data
         csvreader= csv.reader(csvFile, delimiter=",")
@@ -616,31 +593,18 @@ class SantaFeLattice:
         return False
 
     def getVertexEnergy(self,row,col):
-        parEnergy=0;
-        perpEnergy=0;
-
-        top,right,bottom,left = self.getInOutPattern(row,col)
-        
-        for pair in [(top,bottom),(right,left)]:
-            if pair[0] is None or pair[1] is None:
-                continue
-            if(pair[0]==pair[1]):
-                parEnergy+=1
-            else:
-                parEnergy-=1
-        
-        for pair in [(top,right),(right,bottom),(bottom,left),(left,top)]:
-            if(pair[0] is None or pair[1] is None):
-                continue
-            if(pair[0]==pair[1]):
-                perpEnergy+=1
-            else:
-                perpEnergy-=1
-        
-        return VertexEnergy(parEnergy,perpEnergy)
+        if self.vertexEnergies is None:
+            raise Exception("no vertex energies")
+        islandCount, type = self.getVertexCountType(row,col)
+        try:
+            return self.vertexEnergies[islandCount][type]
+        except KeyError:
+            return 0
     
     def getStringEnergy(self,string):
-        energy=VertexEnergy(0,0)
+        if self.vertexEnergies is None:
+            raise Exception("no vertex energies")
+        energy=0
         for point in string.getPoints():
             energy+=self.getVertexEnergy(*point)
         return energy
@@ -785,7 +749,7 @@ class SantaFeLattice:
             #cv2.rectangle(image,(int(x-4*spacingX),int(y-4*spacingY)),(int(x+4*spacingX),int(y+4*spacingY)),GREEN,1)
 
             #cv2.putText(image, str(cell.stringsInCompositeSquare), (x,y), cv2.FONT_HERSHEY_SIMPLEX,0.3, BLACK, 1, cv2.LINE_AA)
-        energy=self.getVertexEnergy(rowI,colI)
+        #energy=self.getVertexEnergy(rowI,colI)
         #if energy.par != 0 or energy.perp!=0:
         #    cv2.putText(image, str(energy), (x,y), cv2.FONT_HERSHEY_SIMPLEX,0.2, BLACK, 1, cv2.LINE_AA)
 
@@ -976,20 +940,22 @@ class SantaFeLattice:
 
     #check if a cell at a given row,col is a dimer
     def isDimer(self, rowI,colI):
-        cell=self.getCell(rowI,colI)
+        
+        islandCount, type = self.getVertexCountType(rowI,colI)
+        return type>1#all non-type-1 verticies are dimers
 
+    def getVertexCountType(self,rowI,colI):
+        vertexType=0;
+        cell=self.getCell(rowI,colI)
         vertexPattern=self.getInOutPattern(rowI,colI)
         islandCount=self.countInOutArrows(rowI,colI)
-
-        vertexType=0;
 
         if islandCount>1 and cell.arrow is None:
             for type in self.vertexClasses[islandCount].keys():#check if the vertex pattern is in the given type
                 if vertexPattern in self.vertexClasses[islandCount][type]:
                     vertexType=type
                     break
-
-        return vertexType>1#all non-type-1 verticies are dimers
+        return islandCount,vertexType
 
     #just find all dimers and mark that in their cell object
     def updateDimers(self):

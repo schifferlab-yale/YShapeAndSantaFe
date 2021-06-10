@@ -1,5 +1,7 @@
 Types: No change, wiggle/grow/shrink, merge/split, loop creation/annihilation, string creation/annihilation
 
+DOUBLE CHECK THIS
+
 1. Get list of strings from both frames
 2. Detect strings which are exactly the same, classify as no change and remove from list
 3. Detect strings which connect exactly the same set of composite squares between frames, mark these 
