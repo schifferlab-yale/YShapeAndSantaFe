@@ -61,19 +61,19 @@ vertexEnergies["Sep_2016_700"]={
 }
 vertexEnergies["Sep_2016_800"]={
     2:{
-        1:,
-        2:
+        1:1.617E-18,
+        2:1.667E-18
     },
     3:{
-        1:,
-        2:,
-        3:
+        1:2.372E-18,
+        2:2.401E-18,
+        3:2.557E-18
     },
     4:{
-        1:,
-        2:,
-        3:,
-        4:
+        1:3.143E-18,
+        2:3.171E-18,
+        3:3.248E-18,
+        4:3.526E-18
     }
 }
 
@@ -277,6 +277,8 @@ if __name__=="__main__":
     curDir=os.path.dirname(__file__)
     files = glob.glob(curDir + '/'+folder+'/**/*.csv', recursive=True)
 
+
+    madeHeader=False
     motionKeys=[]
 
     with open(curDir+"/out/out.txt","a") as outFile:
@@ -285,12 +287,16 @@ if __name__=="__main__":
 
             relativePath=file.split(folder)[1]
 
+
+            if(determineFileType(relativePath)!="Sep_2016_800"):
+                continue
+        
             try:
                 type=determineFileType(relativePath)
                 energies=vertexEnergies[type]
             except Exception:
                 energies=None
-                print("could not find energies for"+fileI)
+                print("could not find energies for "+fileI)
             
             
 
@@ -299,7 +305,9 @@ if __name__=="__main__":
 
 
                 #TEXT
-                if(fileI==0):
+                if(not madeHeader):
+                    madeHeader=True
+                    
                     motionKeys=motionCounts.keys()
                     outFile.write("file name, ")
                     for key in motionKeys:
@@ -319,5 +327,5 @@ if __name__=="__main__":
                 for i,file in enumerate(outImages):
                     cv2.imwrite(outDir+str(i)+".jpg", np.float32(file))
             except Exception as e:
-                #raise
+                raise
                 print(e)

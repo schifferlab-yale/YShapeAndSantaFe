@@ -281,6 +281,8 @@ class NodeNetwork:
     
     #same as sampling a color but only returns 1 or -1
     def sampleImage(self,x,y):
+        if int(y)<0 or int(y)>=len(self.BWImage) or int(x)<0 or int(x)>=len(self.BWImage[int(y)]):
+            return 0
         color=self.BWImage[int(y)][int(x)][0]
         if(color>127):
             return 1

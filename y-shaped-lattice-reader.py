@@ -136,6 +136,8 @@ def show():
 
 
 def mouse_event(event, x, y,flags, param):
+    global lastMouse
+
     if event == cv2.EVENT_RBUTTONDOWN:
         n.splitAtClosestPoint(x,y)
     elif event ==cv2.EVENT_LBUTTONDOWN:
@@ -151,6 +153,7 @@ def mouse_event(event, x, y,flags, param):
     elif event == cv2.EVENT_RBUTTONDOWN:
         pass
 
+    lastMouse=(x,y)
     show()
 
 show();
@@ -163,6 +166,9 @@ print("c/x: Add/remove column")
 print("o: toggle row offset")
 print("t: toggle row trim")
 print("q: toggle reference image")
+
+lastMouse=(0,0)
+
 while(True):
     key=cv2.waitKey(0)
     if(key==ord("\r")):
@@ -192,6 +198,9 @@ while(True):
         n.setSamplePoints()
     elif(key==ord("q")):
         show_ref_image=not show_ref_image
+    elif(key==ord("j")):
+        for i in range(10):
+            n.jiggleNearestFixedPoint(*lastMouse)
     show()
 
 with open('output.csv', 'w') as file:

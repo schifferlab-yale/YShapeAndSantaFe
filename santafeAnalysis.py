@@ -1325,7 +1325,7 @@ class SantaFeLattice:
 
 
 if __name__=="__main__":
-    if(False):
+    if(True):
         parser = argparse.ArgumentParser(description='Santa fe csv analysis')
         parser.add_argument("file", type=str, help="Path to csv file")
         args=parser.parse_args()
