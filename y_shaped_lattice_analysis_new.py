@@ -263,16 +263,16 @@ class YShapeLattice:
             if neighbors[i] ==[] or neighbors[i] is None:
                 neighbors[i]=[0,0,0,0]
 
-        topLeft=neighbors[TOPLEFTNEIGHBOR][BOTTOM]+neighbors[LEFTNEIGHBOR][TOPRIGHT]+thisCell[TOPLEFT]
-        topRight=neighbors[TOPRIGHTNEIGHBOR][BOTTOM]+neighbors[RIGHTNEIGHBOR][TOPLEFT]+thisCell[TOPRIGHT]
-        bottom=neighbors[BOTTOMLEFTNEIGHBOR][TOPRIGHT]+neighbors[BOTTOMRIGHTNEIGHBOR][TOPLEFT]+thisCell[BOTTOM]
+        topLeft=-(neighbors[TOPLEFTNEIGHBOR][BOTTOM]+neighbors[LEFTNEIGHBOR][TOPRIGHT]+thisCell[TOPLEFT])
+        topRight=-(neighbors[TOPRIGHTNEIGHBOR][BOTTOM]+neighbors[RIGHTNEIGHBOR][TOPLEFT]+thisCell[TOPRIGHT])
+        bottom=-(neighbors[BOTTOMLEFTNEIGHBOR][TOPRIGHT]+neighbors[BOTTOMRIGHTNEIGHBOR][TOPLEFT]+thisCell[BOTTOM])
 
         return [topLeft,topRight,bottom]
     
     def getIslandCharge(self,row,col):
         island=self.data[row][col]
 
-        return -(island[TOPLEFT]+island[TOPRIGHT]+island[BOTTOM])
+        return (island[TOPLEFT]+island[TOPRIGHT]+island[BOTTOM])
 
     def draw(self,img,showIslands=True, showIslandCharge=True, showRings=False,showVertexCharge=False):
         data=self.data
@@ -353,10 +353,11 @@ class YShapeLattice:
 
                 
                 if showVertexCharge:
-                    if(row==len(ys)-1):
-                        pass#skip last row
-                    else:
+                    neighbors=self.getNeighbors(row,col)
+
+                    if(neighbors[BOTTOMLEFTNEIGHBOR] is not None and neighbors[BOTTOMRIGHTNEIGHBOR] is not None):
                         vertexCharges=self.getVerticies(row,col)
+                        #vertexCharges[2]*=-1#don't do
 
                         if(vertexCharges[2]<0):color=BLACK
                         elif(vertexCharges[2]>0):color=WHITE
@@ -407,7 +408,10 @@ class YShapeLattice:
                 chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing,self.getIslandCharge(y,x)))
 
                 vertexCharge=self.getVerticies(y,x)[2]
-                if(x!=0 and x!=len(row)-1):
+
+                neighbors=self.getNeighbors(y,x)
+
+                if(neighbors[BOTTOMLEFTNEIGHBOR] is not None and neighbors[BOTTOMRIGHTNEIGHBOR] is not None):
                     chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing+math.sqrt(3)/3,vertexCharge))
 
         return chargeGrid
@@ -461,17 +465,17 @@ if __name__=="__main__":
 
         cg=y.getChargeGrid()
         cg.draw(chargeImg)
-        print(cg.getChargeCorrelation(cg.charges[2]))
         overall=cg.getOverallChargeCorrelation()
-        overall=overall[1:10]
+        overall=overall[1:9]
         print([el for el in overall])
         plt.pyplot.plot(range(len(overall)),[el[1] for el in overall])
+        plt.pyplot.axhline(y=0, linestyle='-')
 
         plt.pyplot.show()
 
         #cv2.imshow("grid",chargeImg)
 
-        #cv2.imshow("window",outputImage1)
+            #cv2.imshow("window",outputImage1)
         #cv2.waitKey(0)
 
         #cv2.imwrite("analysis-output.jpg", np.float32(outputImage));
@@ -497,7 +501,20 @@ if __name__=="__main__":
             y=YShapeLattice(data)
             cg=y.getChargeGrid()
 
-            overall=cg.getOverallChargeCorrelation()
+            chargeImg=np.zeros((1000,1000,3), np.uint8)
+            chargeImg[:,:]=(150,150,150)
+
+            #cg.draw(chargeImg)
+
+            y.draw(chargeImg,showIslands=False,showVertexCharge=True)
+
+            cv2.imshow("window",chargeImg)
+            print(fileName.split(".")[1]+"_charge.jpg")
+            cv2.imwrite(fileName.split(".")[1][1:]+"_charge.jpg",chargeImg)
+            cv2.waitKey(0)
+
+
+            """overall=cg.getOverallChargeCorrelation()
             overall=overall[1:11]
 
             print(fileName,end=", ")
@@ -505,4 +522,4 @@ if __name__=="__main__":
                 print(f"{el[0]}",end=", ")
             for el in overall:
                 print(f"{el[1]}",end=", ")
-            print("\n")
+            print("\n",end="")"""

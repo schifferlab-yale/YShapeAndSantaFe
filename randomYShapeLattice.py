@@ -65,7 +65,7 @@ def randomLattice(width,height,allow3InOut=True):
 
 
 if __name__=="__main__":
-    lattice=randomLattice(10,10,allow3InOut=False)
+    lattice=randomLattice(50,50,allow3InOut=False)
     img,stats=y_shaped_lattice_analysis.analyze(lattice)
     print(stats)
 
