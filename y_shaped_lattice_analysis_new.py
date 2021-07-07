@@ -16,6 +16,8 @@ GREEN=(0,255,0)
 BLUE=(255,0,0)
 RED=(0,0,255)
 GREY=(127,127,127)
+ORANGE=(0,165,255)
+PURPLE=(130,0,75)
 
 
 TOPLEFT=0
@@ -274,16 +276,16 @@ class YShapeLattice:
 
         return (island[TOPLEFT]+island[TOPRIGHT]+island[BOTTOM])
 
-    def draw(self,img,showIslands=True, showIslandCharge=True, showRings=False,showVertexCharge=False):
+    def draw(self,img,showIslands=True, showIslandCharge=True, showRings=False,showVertexCharge=False, halfInverted=False):
         data=self.data
 
         imageHeight,imageWidth,channels=img.shape
-        padding=100
+        padding=30
 
-        spacingX=(imageWidth-2*padding)/(len(data[0])-1)
+        spacingX=(imageWidth-2*padding)/(len(data[0]))
         spacingY=(imageHeight-2*padding)/(len(data)-1)
 
-        armLength=min(spacingX,spacingY)/2.5
+        armLength=min(spacingX,spacingY)/3
         offsets=[
             np.array([armLength*math.cos(-5*math.pi/6),armLength*math.sin(-5*math.pi/6)]),
             np.array([armLength*math.cos(-math.pi/6),armLength*math.sin(-math.pi/6)]),
@@ -336,19 +338,26 @@ class YShapeLattice:
                         if(color==GREEN):
                             cv2.line(img,point1,point2,color,2)
                         else:
-                            cv2.arrowedLine(img,point1,point2,color,2,tipLength=spacingX/400)
+                            cv2.arrowedLine(img,point1,point2,color,4,tipLength=spacingX/100)
                     else:
                         cv2.line(img,node,nearCenter,BLACK,1)
 
                 
                 if showIslandCharge:
                     charge=self.getIslandCharge(row,col)
-                    if charge<0:color=BLACK
-                    elif charge>0: color=WHITE
-                    else: color=GREEN
+                    
+                    if not halfInverted:
+                        if(charge<0):color=BLUE
+                        elif(charge>0):color=RED
+                        else: color=GREEN
+                    else:
+                        if charge<0:color=ORANGE
+                        elif charge>0:color=PURPLE
+                        else: color=GREEN
+
 
                     coord=(int(xy[0]),int(xy[1]))
-                    cv2.circle(img,coord,2*(abs(charge)),color,-1)
+                    cv2.circle(img,coord,2+4*(abs(charge)),color,-1)
 
 
                 
@@ -357,14 +366,21 @@ class YShapeLattice:
 
                     if(neighbors[BOTTOMLEFTNEIGHBOR] is not None and neighbors[BOTTOMRIGHTNEIGHBOR] is not None):
                         vertexCharges=self.getVerticies(row,col)
-                        #vertexCharges[2]*=-1#don't do
 
-                        if(vertexCharges[2]<0):color=BLACK
-                        elif(vertexCharges[2]>0):color=WHITE
-                        else: color=GREEN
+                        if halfInverted:
+                            vertexCharges[2]*=-1
 
-                        coord=(int(xy[0]+offsets[BOTTOM][0]),int(xy[1]+offsets[BOTTOM][1]+spacingY/5))
-                        cv2.circle(img,coord,2*(abs(vertexCharges[2])),color,-1)
+                        if not halfInverted:
+                            if(vertexCharges[2]<0):color=BLUE
+                            elif(vertexCharges[2]>0):color=RED
+                            else: color=GREEN
+                        else:
+                            if vertexCharges[2]<0:color=ORANGE
+                            elif vertexCharges[2]>0:color=PURPLE
+                            else: color=GREEN
+
+                        coord=(int(xy[0]+offsets[BOTTOM][0]),int(xy[1]+spacingX*math.sqrt(3)/3))
+                        cv2.circle(img,coord,4+2*(abs(vertexCharges[2])),color,-1)
 
                 if showRings:
                     #check if this island is the top left of a loop
@@ -481,18 +497,18 @@ if __name__=="__main__":
         #cv2.imwrite("analysis-output.jpg", np.float32(outputImage));
     else:
         files=[
-            '.\Y-shape(6-14-21)\\107.csv',
-            '.\Y-shape(6-14-21)\\108.csv',
-            '.\Y-shape(6-14-21)\\109.csv',
-            '.\Y-shape(6-14-21)\\110.csv',
-            '.\Y-shape(6-14-21)\\111.csv',
-            '.\Y-shape(6-14-21)\\112.csv',
-            '.\Y-shape(6-14-21)\\113.csv',
-            '.\Y-shape(6-14-21)\\114.csv',
-            '.\Y-shape(6-14-21)\\115.csv',
-            '.\Y-shape(6-14-21)\\116.csv',
-            '.\Y-shape(6-14-21)\\117.csv',
-            '.\Y-shape(6-14-21)\\118.csv'
+            'Y-shape(6-14-21)/107.csv',
+            'Y-shape(6-14-21)/108.csv',
+            'Y-shape(6-14-21)/109.csv',
+            'Y-shape(6-14-21)/110.csv',
+            'Y-shape(6-14-21)/111.csv',
+            'Y-shape(6-14-21)/112.csv',
+            'Y-shape(6-14-21)/113.csv',
+            'Y-shape(6-14-21)/114.csv',
+            'Y-shape(6-14-21)/115.csv',
+            'Y-shape(6-14-21)/116.csv',
+            'Y-shape(6-14-21)/117.csv',
+            'Y-shape(6-14-21)/118.csv'
         ]
         for fileName in files:
             file=open(fileName,newline="\n")
@@ -504,13 +520,18 @@ if __name__=="__main__":
             chargeImg=np.zeros((1000,1000,3), np.uint8)
             chargeImg[:,:]=(150,150,150)
 
+            chargeImg_halfInverted=np.zeros((1000,1000,3), np.uint8)
+            chargeImg_halfInverted[:,:]=(150,150,150)
+
             #cg.draw(chargeImg)
 
-            y.draw(chargeImg,showIslands=False,showVertexCharge=True)
+            y.draw(chargeImg,showIslands=True,showVertexCharge=True,halfInverted=False)
+            y.draw(chargeImg_halfInverted,showIslands=True,showVertexCharge=True,halfInverted=True)
 
-            cv2.imshow("window",chargeImg)
-            print(fileName.split(".")[1]+"_charge.jpg")
-            cv2.imwrite(fileName.split(".")[1][1:]+"_charge.jpg",chargeImg)
+            #cv2.imshow("window",chargeImg)
+            print(fileName.split(".")[0][0:]+"_charge.jpg")
+            cv2.imwrite(fileName.split(".")[0][0:]+"_charge.jpg",chargeImg)
+            cv2.imwrite(fileName.split(".")[0][0:]+"_charge_halfInverted.jpg",chargeImg_halfInverted)
             cv2.waitKey(0)
 
 

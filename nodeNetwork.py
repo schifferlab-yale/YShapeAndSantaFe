@@ -12,7 +12,7 @@ The output of the nodenetwork will generally just be reading the color of each o
 import cv2
 import numpy as np
 import math
-from random import random
+from random import random, sample
 import time
 
 #constants
@@ -54,10 +54,11 @@ def xyArrayToIntTuple(arr):
 
 #main class
 class NodeNetwork:
-    def __init__(self,topLeft,topRight,bottomLeft,bottomRight,rows, cols, image):
+    def __init__(self,topLeft,topRight,bottomLeft,bottomRight,rows, cols, image,pointSampleRadius=5):
         self.image=image;
         #how far around the pixel to look when determining the color of a point
-        self.pointSampleWidth=5
+        assert(pointSampleRadius%2==1)#must be odd
+        self.pointSampleWidth=pointSampleRadius
         self.bwImage=self.makeBWImage(image)
 
         #number of rows and columns
@@ -183,24 +184,26 @@ class NodeNetwork:
 
         #draw the sample points if we are not dragging
         if not self.dragging:
-            samplePoints=self.samplePoints
-            for (rowI, row) in enumerate(samplePoints):
-                for (vertexI, vertex) in enumerate(row):
-                    for (pointI, point) in enumerate(vertex):
-                        #Draw Point based on color
-                        if(point[2]==1):
-                            color=RED
-                        elif(point[2]==0):
-                            color=GREEN
-                        elif(point[2]==-1):
-                            color=BLUE
+            self.drawSamplePoints(im)
 
-                        im=cv2.circle(im,(int(point[0]),int(point[1])),2,color,-1)
+    def drawSamplePoints(self,im):
+        samplePoints=self.samplePoints
+        for (rowI, row) in enumerate(samplePoints):
+            for (vertexI, vertex) in enumerate(row):
+                for (pointI, point) in enumerate(vertex):
+                    #Draw Point based on color
+                    if(point[2]==1):
+                        color=RED
+                    elif(point[2]==0):
+                        color=GREEN
+                    elif(point[2]==-1):
+                        color=BLUE
 
-                        #Check for errors:
-                        if(self.hasError(samplePoints,rowI,vertexI,pointI)):
-                            im=cv2.circle(im,(int(point[0]),int(point[1])),5,GREEN,2)
+                    im=cv2.circle(im,(int(point[0]),int(point[1])),2,color,-1)
 
+                    #Check for errors:
+                    if(self.hasError(samplePoints,rowI,vertexI,pointI)):
+                        im=cv2.circle(im,(int(point[0]),int(point[1])),5,GREEN,2)
 
     #given a given row, vertex, point. Determine if there is an error or not
     def hasError(self, samplePoints, rowI, vertexI, pointI):
@@ -307,8 +310,11 @@ class NodeNetwork:
 
                 squareSamplePoints=self.getSamplePointsFromSquare(topLeft,topRight,bottomLeft,bottomRight, row=rowI, col=pointI)
                 #get what color each point is
+
                 for samplePoint in squareSamplePoints:
+
                     samplePoint.append(self.sampleImage(samplePoint[0],samplePoint[1]))
+  
 
                 samplePoints[-1].append(squareSamplePoints)
         self.samplePoints=samplePoints

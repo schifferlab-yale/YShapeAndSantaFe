@@ -31,13 +31,14 @@ GREEN=(0,255,0)
 BLUE=(255,0,0)
 RED=(0,0,255)
 
+shiftConstant=0.25
 
 class SquareNodeNetwork(NodeNetwork):
 
     #this will return the four points inside a square
     def getSamplePointsFromSquare(self,topLeft,topRight,bottomLeft,bottomRight,row=0,col=0):
         #multiplier for how far the sample points are from the edge of the square
-        shiftConstant=0.25
+        
 
         #get center of sides of square
         centerTop=[topLeft[0]+(topRight[0]-topLeft[0])/2, topLeft[1]+(topRight[1]-topLeft[1])/2]
@@ -204,6 +205,14 @@ while True:
     key=cv2.waitKey(0)
     if(key==ord("\r")):
         break;
+    elif(key==ord("+")):
+        if shiftConstant<0.5:
+            shiftConstant+=0.01
+        n.setSamplePoints()
+    elif(key==ord("-")):
+        if shiftConstant>0:
+            shiftConstant-=0.01
+        n.setSamplePoints()
     elif(key==ord("r")):
         n.addRow()
     elif(key==ord("e")):
