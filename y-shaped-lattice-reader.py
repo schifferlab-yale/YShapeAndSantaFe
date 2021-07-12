@@ -110,7 +110,7 @@ class YShapeNodeNetwork(NodeNetwork):
 
 
 n=YShapeNodeNetwork(Node(10,10),Node(800,10),Node(30,800),Node(700,700),args.rows+1, args.columns+1,image)
-n.pointSampleWidth=1
+n.pointSampleWidth=3
 
 
 
@@ -141,7 +141,7 @@ def mouse_event(event, x, y,flags, param):
     if event == cv2.EVENT_RBUTTONDOWN:
         n.splitAtClosestPoint(x,y)
     elif event ==cv2.EVENT_LBUTTONDOWN:
-        if(flags==16 or flags==17):
+        if(flags==16 or flags==17 or flags==48):
             n.toggleNearestSamplePoint(x,y)
         else:
             n.selectNearestFixedPoint(x,y)
@@ -171,6 +171,7 @@ lastMouse=(0,0)
 
 while(True):
     key=cv2.waitKey(0)
+
     if(key==ord("\r")):
         break;
     elif(key==ord("+")):

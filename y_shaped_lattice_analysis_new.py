@@ -38,7 +38,7 @@ RIGHTVERTEX=2
 
 def getFileData(file):
     file=file.read().replace("\t","")
-    file=file.split("\r\n")
+    file=file.split("\n")
     file=[line.split(", ") for line in file]
     return file
 
@@ -276,7 +276,7 @@ class YShapeLattice:
 
         return (island[TOPLEFT]+island[TOPRIGHT]+island[BOTTOM])
 
-    def draw(self,img,showIslands=True, showIslandCharge=True, showRings=False,showVertexCharge=False, halfInverted=False):
+    def draw(self,img,showIslands=True, showIslandCharge=True, showRings=False,showVertexCharge=False, halfInverted=False,armWidth=4):
         data=self.data
 
         imageHeight,imageWidth,channels=img.shape
@@ -338,7 +338,7 @@ class YShapeLattice:
                         if(color==GREEN):
                             cv2.line(img,point1,point2,color,2)
                         else:
-                            cv2.arrowedLine(img,point1,point2,color,4,tipLength=spacingX/100)
+                            cv2.arrowedLine(img,point1,point2,color,armWidth,tipLength=spacingX/100)
                     else:
                         cv2.line(img,node,nearCenter,BLACK,1)
 
@@ -366,6 +366,7 @@ class YShapeLattice:
 
                     if(neighbors[BOTTOMLEFTNEIGHBOR] is not None and neighbors[BOTTOMRIGHTNEIGHBOR] is not None):
                         vertexCharges=self.getVerticies(row,col)
+
 
                         if halfInverted:
                             vertexCharges[2]*=-1
@@ -479,7 +480,23 @@ if __name__=="__main__":
         chargeImg=np.zeros((1000,1000,3), np.uint8)
         chargeImg[:,:]=(150,150,150)
 
-        cg=y.getChargeGrid()
+        chargeImg_halfInverted=np.zeros((1000,1000,3), np.uint8)
+        chargeImg_halfInverted[:,:]=(150,150,150)
+
+        #cg.draw(chargeImg)
+
+        y.draw(chargeImg,showIslands=True,showVertexCharge=True,halfInverted=False)
+        y.draw(chargeImg_halfInverted,showIslands=True,showVertexCharge=True,halfInverted=True)
+
+        #cv2.imshow("window",chargeImg)
+        fileName=args.file
+        print(fileName.split(".")[0][0:]+"_charge.jpg")
+        cv2.imwrite(fileName.split(".")[0][0:]+"_charge.jpg",chargeImg)
+        cv2.imwrite(fileName.split(".")[0][0:]+"_charge_halfInverted.jpg",chargeImg_halfInverted)
+        cv2.waitKey(0)
+
+
+        """cg=y.getChargeGrid()
         cg.draw(chargeImg)
         overall=cg.getOverallChargeCorrelation()
         overall=overall[1:9]
@@ -487,7 +504,7 @@ if __name__=="__main__":
         plt.pyplot.plot(range(len(overall)),[el[1] for el in overall])
         plt.pyplot.axhline(y=0, linestyle='-')
 
-        plt.pyplot.show()
+        plt.pyplot.show()"""
 
         #cv2.imshow("grid",chargeImg)
 
@@ -497,18 +514,15 @@ if __name__=="__main__":
         #cv2.imwrite("analysis-output.jpg", np.float32(outputImage));
     else:
         files=[
-            'Y-shape(6-14-21)/107.csv',
-            'Y-shape(6-14-21)/108.csv',
-            'Y-shape(6-14-21)/109.csv',
-            'Y-shape(6-14-21)/110.csv',
-            'Y-shape(6-14-21)/111.csv',
-            'Y-shape(6-14-21)/112.csv',
-            'Y-shape(6-14-21)/113.csv',
-            'Y-shape(6-14-21)/114.csv',
-            'Y-shape(6-14-21)/115.csv',
-            'Y-shape(6-14-21)/116.csv',
-            'Y-shape(6-14-21)/117.csv',
-            'Y-shape(6-14-21)/118.csv'
+            'Y-shape(7-7-21)/206.csv',
+            'Y-shape(7-7-21)/207.csv',
+            'Y-shape(7-7-21)/208.csv',
+            'Y-shape(7-7-21)/209.csv',
+            'Y-shape(7-7-21)/210.csv',
+            'Y-shape(7-7-21)/211.csv',
+            'Y-shape(7-7-21)/215.csv',
+            'Y-shape(7-7-21)/216.csv',
+            'Y-shape(7-7-21)/217.csv',
         ]
         for fileName in files:
             file=open(fileName,newline="\n")
@@ -523,24 +537,30 @@ if __name__=="__main__":
             chargeImg_halfInverted=np.zeros((1000,1000,3), np.uint8)
             chargeImg_halfInverted[:,:]=(150,150,150)
 
+            ringImg=np.zeros((1000,1000,3), np.uint8)
+            ringImg[:,:]=(150,150,150)
+
             #cg.draw(chargeImg)
 
             y.draw(chargeImg,showIslands=True,showVertexCharge=True,halfInverted=False)
             y.draw(chargeImg_halfInverted,showIslands=True,showVertexCharge=True,halfInverted=True)
+            y.draw(ringImg,showIslands=True,showRings=True,showIslandCharge=False,armWidth=2)
 
             #cv2.imshow("window",chargeImg)
-            print(fileName.split(".")[0][0:]+"_charge.jpg")
+            #print(fileName.split(".")[0][0:]+"_charge.jpg")
             cv2.imwrite(fileName.split(".")[0][0:]+"_charge.jpg",chargeImg)
             cv2.imwrite(fileName.split(".")[0][0:]+"_charge_halfInverted.jpg",chargeImg_halfInverted)
-            cv2.waitKey(0)
+            cv2.imwrite(fileName.split(".")[0][0:]+"_rings.jpg",ringImg)
+            #cv2.waitKey(0)
 
 
-            """overall=cg.getOverallChargeCorrelation()
-            overall=overall[1:11]
+            if (True):#charge correlation
+                overall=cg.getOverallChargeCorrelation()
+                overall=overall[1:11]
 
-            print(fileName,end=", ")
-            for el in overall:
-                print(f"{el[0]}",end=", ")
-            for el in overall:
-                print(f"{el[1]}",end=", ")
-            print("\n",end="")"""
+                print(fileName,end=", ")
+                for el in overall:
+                    print(f"{el[0]}",end=", ")
+                for el in overall:
+                    print(f"{el[1]}",end=", ")
+                print("\n",end="")
