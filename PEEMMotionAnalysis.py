@@ -634,7 +634,7 @@ if __name__ == "__main__":
         unittest.main(argv=['first-arg-is-ignored'], exit=False)
         exit();
 
-    #motionCounts, outImages, allMotions = analyzeFile(args.file,maxFrame=args.numImages)
+    motionCounts, outImages, allMotions = analyzeFile(args.file,maxFrame=args.numImages)
 
     dirname = os.path.dirname(__file__)
 
