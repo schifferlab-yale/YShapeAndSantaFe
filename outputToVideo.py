@@ -25,9 +25,9 @@ if __name__ == "__main__":
                 os.chdir(currentpath)
                 fileName=currentpath.split(mainDir)[1].replace("\\","-").replace("/","-").replace(":","-").replace(" ","-").replace(".csv","")
                 #print(fileName)
-                outputFile=dirname+"\\"+os.path.join(mainDir,"videos")+"\\"+fileName+".mp4"
+                outputFile=dirname+"/"+os.path.join(mainDir,"videos")+"/"+fileName+".mp4"
                 #print(outputFile)
-                cmd="ffmpeg -r 2 -f image2  -i %d.jpg -vcodec libx264 -crf 30  -pix_fmt yuv420p "+outputFile+" -loglevel quiet"
+                cmd="ffmpeg -r 2 -f image2 -i %d.jpg -vcodec libx264 -crf 30 -pix_fmt yuv420p -vf scale=750:500 "+outputFile+" -loglevel quiet"
                 print(cmd)
                 os.system(cmd)
             except Exception as e:

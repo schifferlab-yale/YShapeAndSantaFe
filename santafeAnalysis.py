@@ -6,6 +6,7 @@ from random import randint
 from random import shuffle
 import argparse
 import csv
+import base64
 
 
 
@@ -257,6 +258,12 @@ class String():
                 if not(point in points):
                     points.append(point)
         return points
+    
+    def getInteriorCenterPoints(self,lattice):
+        return [point for point in self.getPoints() if lattice.isCenter(*point) and lattice.isInteriorCenter(*point)]
+    def getNonInteriorCenterPoints(self,lattice):
+        return [point for point in self.getPoints() if not lattice.isCenter(*point) or not lattice.isInteriorCenter(*point)]
+
 
     #gets a linesegment representation of the string
     def getTrace(self):
@@ -346,8 +353,11 @@ class String():
         #https://stackoverflow.com/questions/526331/cycles-in-an-undirected-graph
         return graphHasCycle(self.asGraph())
 
+    def b36id(self):
+        return np.base_repr(self.id,36)[0:4]
+
     def __repr__(self):
-        return str(self.id)
+        return str(self.b36id())
 
 
 #a point in teh grid which holds information about it
@@ -597,7 +607,7 @@ class SantaFeLattice:
             raise Exception("no vertex energies")
         islandCount, type = self.getVertexCountType(row,col)
         try:
-            return self.vertexEnergies[islandCount][type]
+            return self.vertexEnergies[str(islandCount)][str(type)]
         except KeyError:
             return 0
     
@@ -638,7 +648,7 @@ class SantaFeLattice:
 
         #cv2.line(image, self.getXYFromRowCol(*string.getCoM(),image), self.getXYFromRowCol(*self.getNearestStringNeighbor(string).getCoM(),image),RED,2)
         if(showID):
-            text=str(string.id)
+            text=string.b36id()
             #text+=" "+str(self.getStringEnergy(string))
             #if(string.isLoop()):
             #    text+=" loop"

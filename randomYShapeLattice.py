@@ -74,7 +74,7 @@ if __name__=="__main__":
 
     with open('randomLattice.csv', 'w') as file:
 
-        string= "\n".join([el[0] for el in[[", ".join([str(el) for el in row])] for row in lattice]])
+        string= "\n\r".join([el[0] for el in[[", ".join([str(el) for el in row])] for row in lattice]])
 
         file.write(string)
 

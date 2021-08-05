@@ -5,7 +5,7 @@ import csv
 import argparse
 import cv2
 import numpy as np
-
+#python3 newNewPeemMotionAnalysis.py cleanedPEEMFiles/Nov_2020_adjust_/Nov_2020_adjust/800short/800short_330K#_SF_adjustspin_clustering_total.csv 
 
 
 with open('SFVertexEnergies.json') as f:
@@ -100,128 +100,11 @@ def rotatedFileDataAsSantaFe(fileName,maxIndex=None):
         lattices.append(lattice)
     return lattices
 
-def groupByTouchingInteriors(oldLattice,newLattice,oldStrings,newStrings):
-
-    groups={}
-
-    for string in oldStrings:
-        touching=frozenset(oldLattice.getTouchingCompositeSquares(string))
-        if(len(touching)==0):
-            continue
-        thisHash=hash(touching)
-        if thisHash in groups:
-            groups[thisHash][0].append(string)
-        else:
-            groups[thisHash]=([string],[])
-    
-    for string in newStrings:
-        touching=frozenset(newLattice.getTouchingCompositeSquares(string))
-        if(len(touching)==0):
-            continue
-        thisHash=hash(touching)
-        if thisHash in groups:
-            groups[thisHash][1].append(string)
-        else:
-            groups[thisHash]=([],[string])
-    
-
-
-    return groups.values()
-
-    
 
         
-def getNoChange(oldStrings,newStrings):
-    noChanges=[]
-
-    for string in oldStrings:
-        points=set(string.getPoints())
-        for string2 in newStrings:
-            if set(string2.getPoints())==points:
-                noChanges.append((string,string2))
-                break
-
-    return noChanges
 
 
-#this will edit the arrays
-def getTrivialMotions(oldLattice,newLattice,oldStrings,newStrings,minExtraSharedPoints=1):
-
-
-    #get no changes and remove
-    noChange=getNoChange(oldStrings,newStrings)
-    for pair in noChange:
-        oldStrings.remove(pair[0])
-        newStrings.remove(pair[1])
-    
-    #main part
-    groups=groupByTouchingInteriors(oldLattice,newLattice,oldStrings,newStrings)
-    #remove non-paired strings
-    groups=[group for group in groups if len(group[0])!=0 and len(group[1])!=0]
-    
-    #classify remaining trivial motions and remove from list
-    trivialAmbiguous=[]
-    trivialGrow=[]
-    trivialWiggle=[]
-    trivialShrink=[]
-    deletion=[]
-    creation=[]
-    for group in groups:
-        oldCount=len(group[0])
-        newCount=len(group[1])
-        if oldCount>newCount:#a deletion occured
-            trivialAmbiguous+=[[[None],[None]]]*newCount
-            deletion+=[[[None],[]]]*(oldCount-newCount)
-        elif newCount>oldCount:#a creation occured
-            trivialAmbiguous+=[[[None],[None]]]*oldCount
-            creation+=[[[],[None]]]*(newCount-oldCount)
-        elif newCount==oldCount:
-            if newCount>1:
-                trivialAmbiguous+=[[[None],[None]]]*newCount
-            elif newCount==1:
-                oldString=group[0][0]
-                newString=group[1][0]
-                oldLength=len(oldString.getPoints())
-                newLength=len(newString.getPoints())
-
-                oldStringPoints = set(oldString.getNonInteriorCenterPoints(oldLattice))
-                newStringPoints = set(newString.getNonInteriorCenterPoints(newLattice))
-                numExtraSharedPoints=len(oldStringPoints.intersection(newStringPoints))
-
-                if numExtraSharedPoints>=minExtraSharedPoints:
-                    if(oldLength>newLength):
-                        trivialShrink.append(group)
-                    elif newLength>oldLength:
-                        trivialGrow.append(group)
-                    else:
-                        trivialWiggle.append(group)
-                else:
-                    continue
-                    #continue so we don't remove these strings
-            else:
-                raise Exception("Should not get here")
-
-        for string in group[0]:
-            oldStrings.remove(string)
-        for string in group[1]:
-            newStrings.remove(string)
-
-
-
-
-
-    return {
-        "noChange":noChange, 
-        "trivialAmbiguous":trivialAmbiguous,
-        "trivialGrow":trivialGrow,
-        "trivialWiggle":trivialWiggle,
-        "trivialShrink":trivialShrink,
-        "ambiguousCreation":creation,
-        "ambiguousDeletion":deletion,
-        }
-
-
-def generateSharedPointGraph(oldLattice,newLattice,oldStrings,newStrings):
+def generateSharedPointGraph(oldLattice,newLattice,oldStrings,newStrings,minSharedPoints=2,minSharedPointsFraction=0.25,nonInteriorCenterMinSharedPoints=0):
     oldData=[(string,[]) for string in oldStrings]
     newData=[(string, []) for string in newStrings]
     for oldI, oldDataPoint in enumerate(oldData):
@@ -229,17 +112,22 @@ def generateSharedPointGraph(oldLattice,newLattice,oldStrings,newStrings):
         oldConnections=oldDataPoint[1]
 
         oldPoints=oldString.getPoints()
-        oldPoints=[point for point in oldPoints if oldLattice.data[point[0]][point[1]].interiorCenter==False]#remove interior centers
+        nonInteriorCenterOldPoints=[point for point in oldPoints if oldLattice.data[point[0]][point[1]].interiorCenter==False]#remove interior centers
         oldPoints=set(oldPoints)
         for newI, newDataPoint in enumerate(newData):
             newString=newDataPoint[0]
             newConnections=newDataPoint[1]
 
             newPoints=newString.getPoints()
-            newPoints=[point for point in newPoints if newLattice.data[point[0]][point[1]].interiorCenter==False]#remove interior centers
+            nonInteriorCenterNewPoints=[point for point in newPoints if newLattice.data[point[0]][point[1]].interiorCenter==False]#remove interior centers
             newPoints=set(newPoints)
-
-            if len(oldPoints.intersection(newPoints))>0:
+            
+            sharedPoints=len(oldPoints.intersection(newPoints))
+            sharedNonInteriorCenterPoints=len(set(nonInteriorCenterNewPoints).intersection(set(nonInteriorCenterOldPoints)))
+            """if str(oldString)=="AZA3" and str(newString)=="1PXP":
+                print(sharedPoints>=minSharedPoints)
+                print(sharedNonInteriorCenterPoints)"""
+            if sharedPoints>=minSharedPoints and sharedNonInteriorCenterPoints >= nonInteriorCenterMinSharedPoints and (sharedPoints>=len(oldPoints)*minSharedPointsFraction or sharedPoints>=len(newPoints)*minSharedPointsFraction):
                 oldConnections.append(newDataPoint)
                 newConnections.append(oldDataPoint)
 
@@ -289,20 +177,19 @@ def traverseGraph(top,bottom,onTop,currEl,topSeen,bottomSeen):
 
 
     
-def getNonTrivialMotions(oldLattice,newLattice,oldStrings,newStrings):
+def getBaseMotionData(oldLattice,newLattice,oldStrings,newStrings):
     
     oldData,newData=generateSharedPointGraph(oldLattice,newLattice,oldStrings,newStrings)
 
 
     graphs=sepererateGraph(oldData,newData)
     
-    nonTrivialWiggle=[]
-    nonTrivialGrow=[]
-    nonTrivialShrink=[]
+    noChange=[]
 
-    trivialGrow=[]
-    trivialWiggle=[]
-    trivialShrink=[]
+    wiggle=[]
+    grow=[]
+    shrink=[]
+
 
     creation=[]
     deletion=[]
@@ -320,34 +207,33 @@ def getNonTrivialMotions(oldLattice,newLattice,oldStrings,newStrings):
 
 
         if len(old)==1 and len(new)==1:#grow wiggle shrink
-            oldPointCount=len(old[0][0].getPoints())
-            newPointCount=len(new[0][0].getPoints())
+            oldString=old[0][0]
+            newString=new[0][0]
+            oldPoints=oldString.getPoints()
+            newPoints=newString.getPoints()
+            oldPointCount=len(oldPoints)
+            newPointCount=len(newPoints)
+            
+            motionElement=([oldString],[newString])
 
-            touchingNoInteriors=len(oldLattice.getTouchingInteriors(old[0][0]))==0 and len(newLattice.getTouchingInteriors(new[0][0]))==0
-
+            if oldPointCount==newPointCount:#wiggle or noChange
+                if set(oldPoints)==set(newPoints):
+                    noChange.append(motionElement)
+                else:
+                    wiggle.append(motionElement)
             if oldPointCount>newPointCount:
-                if touchingNoInteriors:
-                    trivialShrink.append([[old[0][0]],[new[0][0]]])
-                else:
-                    nonTrivialShrink.append([[old[0][0]],[new[0][0]]])
+                shrink.append(motionElement)
             elif newPointCount>oldPointCount:
-                if touchingNoInteriors:
-                    trivialGrow.append([[old[0][0]],[new[0][0]]])
-                else:
-                    nonTrivialGrow.append([[old[0][0]],[new[0][0]]])
-            else:
-                if touchingNoInteriors:
-                    trivialWiggle.append([[old[0][0]],[new[0][0]]])
-                else:
-                    nonTrivialWiggle.append([[old[0][0]],[new[0][0]]])
+                grow.append(motionElement)
+
         elif len(old)==1 and len(new)==0:
-            deletion.append([[old[0][0]],[]])
+            deletion.append(    ([old[0][0]],[])    )
         elif len(old)==0 and len(new)==1:
-            creation.append([[],[new[0][0]]])
+            creation.append(    ([],[new[0][0]])    )
         elif len(old)==1 and len(new)>=2:
-            split.append([old[0][0],[el[0] for el in new]])
+            split.append(   ([old[0][0]],[el[0] for el in new])   )
         elif len(new)==1 and len(old)>=2:
-            merge.append([[el[0] for el in old], new[0][0]])
+            merge.append(   ([el[0] for el in old], [new[0][0]])  )
         elif len(new)==2 and len(old)==2 and len(new[0][1])==2 and len(new[1][1])==2 and len(old[0][1])==2 and len(old[1][1])==2:
             #there are two elements in new and old and each element has two connections
             reconnection.append([[el[0] for el in old],[el[0] for el in new]])
@@ -355,17 +241,11 @@ def getNonTrivialMotions(oldLattice,newLattice,oldStrings,newStrings):
             complex.append([[el[0] for el in old],[el[0] for el in new]])
 
         
-
-
-
-
     return {
-        "nonTrivialWiggle":nonTrivialWiggle,
-        "nonTrivialGrow":nonTrivialGrow,
-        "nonTrivialShrink":nonTrivialShrink,
-        "trivialGrow":trivialGrow,
-        "trivialWiggle":trivialWiggle,
-        "trivialShrink":trivialShrink,
+        "noChange":noChange,
+        "wiggle":wiggle,
+        "grow":grow,
+        "shrink":shrink,
         "creation":creation,
         "deletion":deletion,
         "merge":merge,
@@ -374,6 +254,27 @@ def getNonTrivialMotions(oldLattice,newLattice,oldStrings,newStrings):
         "complex":complex
     }
 
+def splitTrivialNonTrivail(motions,oldLattice,newLattice,keys=None):
+    if keys==None:
+        keys=[key for key in motions.keys()]
+    
+    for key in keys:
+        motions["trivial "+key]=[]
+        motions["nonTrivial "+key]=[]
+        for motion in motions[key]:
+            oldStrings=motion[0]
+            newStrings=motion[1]
+            oldInteriors=[]
+            newInteriors=[]
+            for oldString in oldStrings: oldInteriors.append(oldLattice.getTouchingInteriors(oldString))
+            for newString in newStrings: newInteriors.append(newLattice.getTouchingInteriors(newString))
+            if sorted(oldInteriors)==sorted(newInteriors):
+                motions["trivial "+key].append(motion)
+            else:
+                motions["nonTrivial "+key].append(motion)
+        del motions[key]
+    
+    return motions
 
 
 def stringifyChanges(changes):
@@ -440,27 +341,19 @@ def getMotions(oldLattice,newLattice):
     oldStrings=[string for string in oldLattice.strings]
     newStrings=[string for string in newLattice.strings]
 
-    trivialMotions=getTrivialMotions(oldLattice,newLattice,oldStrings,newStrings)
-
-    nonTrivialMotions=getNonTrivialMotions(oldLattice,newLattice,oldStrings,newStrings)
+    motions=getBaseMotionData(oldLattice,newLattice,oldStrings,newStrings)
+    motions=splitTrivialNonTrivail(motions,oldLattice,newLattice,keys=["wiggle","grow","shrink"])
 
     
 
     #add energy levels for wiggle
-    motions = {}
-    for motionName in set(trivialMotions.keys()) | set(nonTrivialMotions.keys()):
-        motions[motionName]=[]
-        if motionName in trivialMotions.keys():
-            motions[motionName]+=trivialMotions[motionName]
-        if motionName in nonTrivialMotions.keys():
-            motions[motionName]+=nonTrivialMotions[motionName]
-    motions["nonTrivialWiggleEnergyDecrease"], motions["nonTrivialWiggleEnergySame"], motions["nonTrivialWiggleEnergyIncrease"] = classifyWiggleEnergyChange(motions["nonTrivialWiggle"],oldLattice,newLattice)
-    motions["trivialWiggleEnergyDecrease"], motions["trivialWiggleEnergySame"], motions["trivialWiggleEnergyIncrease"] = classifyWiggleEnergyChange(motions["trivialWiggle"],oldLattice,newLattice)
-    del motions["trivialWiggle"]
-    del motions["nonTrivialWiggle"]
+    motions["nonTrivialWiggleEnergyDecrease"], motions["nonTrivialWiggleEnergySame"], motions["nonTrivialWiggleEnergyIncrease"] = classifyWiggleEnergyChange(motions["trivial wiggle"],oldLattice,newLattice)
+    motions["trivialWiggleEnergyDecrease"], motions["trivialWiggleEnergySame"], motions["trivialWiggleEnergyIncrease"] = classifyWiggleEnergyChange(motions["nonTrivial wiggle"],oldLattice,newLattice)
+    del motions["trivial wiggle"]
+    del motions["nonTrivial wiggle"]
 
     #add loop 
-    for motionType in ["creation","deletion","trivialWiggleEnergyIncrease","trivialWiggleEnergySame","trivialWiggleEnergyDecrease","nonTrivialWiggleEnergyDecrease","nonTrivialWiggleEnergySame","nonTrivialWiggleEnergyIncrease","trivialGrow","trivialShrink","nonTrivialGrow","nonTrivialShrink"]:
+    for motionType in ["creation","deletion","trivialWiggleEnergyIncrease","trivialWiggleEnergySame","trivialWiggleEnergyDecrease","nonTrivialWiggleEnergyDecrease","nonTrivialWiggleEnergySame","nonTrivialWiggleEnergyIncrease","trivial grow","trivial shrink","nonTrivial grow","nonTrivial shrink"]:
         motions[motionType+"-loop"]=[]
         for motionPair in motions[motionType]:
             valid=True
@@ -472,7 +365,6 @@ def getMotions(oldLattice,newLattice):
                 motions[motionType+"-loop"].append(motionPair)
         motions[motionType]=[el for el in motions[motionType] if el not in motions[motionType+"-loop"]]#delete the ones from the main list
         
-
 
     
 

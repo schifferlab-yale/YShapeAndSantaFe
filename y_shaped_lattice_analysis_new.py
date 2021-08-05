@@ -6,6 +6,7 @@ from random import randint
 import argparse
 import csv
 import matplotlib as plt
+import os
 
 from numpy.lib.function_base import average
 
@@ -19,12 +20,14 @@ GREY=(127,127,127)
 ORANGE=(0,165,255)
 PURPLE=(130,0,75)
 
-
+#Each of the four points in an island
 TOPLEFT=0
 TOPRIGHT=1
 MIDDLE=2
 BOTTOM=3
 
+
+#for indexing the neighbors of an island
 TOPLEFTNEIGHBOR=0
 TOPRIGHTNEIGHBOR=1
 LEFTNEIGHBOR=2
@@ -32,31 +35,58 @@ RIGHTNEIGHBOR=3
 BOTTOMLEFTNEIGHBOR=4
 BOTTOMRIGHTNEIGHBOR=5
 
-TOPVERTEX=0
-LEFTVERTEX=1
-RIGHTVERTEX=2
+#"Root 3 over 2"
+R3O2=math.sqrt(3)/2
 
 def getFileData(file):
     file=file.read().replace("\t","")
+    
+    file=file.replace("\r\n","\n")#some systems use \r\n, others use \n
     file=file.split("\n")
     file=[line.split(", ") for line in file]
     return file
 
+#basic class for the chargegrid
 class Charge:
-    def __init__(self,x,y,charge):
+    def __init__(self,x,y,charge,type=None):
         self.x=x
         self.y=y
         self.charge=charge
+        self.type=type
     def __repr__(self):
         return f"{self.charge}"
         return f"{self.charge} at {self.x},{self.y}"
 
+#gets a numpy array [x,y] for the moment direction of an island
+def getIslandMomentVector(island):
+    topLeft=np.array([-R3O2,-0.5])*-island[TOPLEFT]
+    topRight=np.array([R3O2,-0.5])*-island[TOPRIGHT]
+    bottom=np.array([0,1])*-island[BOTTOM]
+    return topLeft+topRight+bottom
+
+#gets angle of island moment vector (in degrees)
+def getIslandAngle(island):
+    vector=getIslandMomentVector(island)
+    angleRad=math.atan2(vector[1],vector[0])
+    angle=int(angleRad/(2*math.pi)*360)
+    return angle
+
+#https://stackoverflow.com/questions/57400584/how-to-map-a-range-of-numbers-to-rgb-in-python
+def num_to_rgb(val, max_val=1):
+    i = (val * 255 / max_val);
+    r = round(math.sin(0.024 * i + 0) * 127 + 128);
+    g = round(math.sin(0.024 * i + 2) * 127 + 128);
+    b = round(math.sin(0.024 * i + 4) * 127 + 128);
+    return (r,g,b)
+
+#stores a list of "Charge" instances and their locations
 class ChargeGrid:
     def __init__(self):
         self.charges=[]
+        self.distError=0.00000001
     def addCharge(self,charge):
         self.charges.append(charge)
-    def draw(self,img,padding=50):
+    def draw(self,img,padding=50,colorByType=False):
 
         xS=[charge.x for charge in self.charges]
         yS=[charge.y for charge in self.charges]
@@ -79,12 +109,17 @@ class ChargeGrid:
             imgX=np.interp(charge.x,[minX,maxX], [imgMin,imgMax])
             imgY=np.interp(charge.y,[minY,maxY], [imgMin,imgMax])
 
-            if(charge.charge<0):color=BLACK
-            elif(charge.charge>0):color=WHITE
-            else: color=GREEN
+            if colorByType:
+                if charge.type=="a":color=RED
+                else:color=BLUE
+            else:
+                if(charge.charge<0):color=BLACK
+                elif(charge.charge>0):color=WHITE
+                else: color=GREEN
 
             cv2.circle(img,(int(imgX),int(imgY)),2*abs(charge.charge), color,-1)
 
+    #get all the charges sorted by their distance from (x,y)
     def chargesByDistance(self,x,y):
         out=[]
         for charge in self.charges:
@@ -93,8 +128,10 @@ class ChargeGrid:
 
         out=sorted(out,key=lambda el:el[0])
         return out
+    
+    #group charges by their distance from a given point 
     def getGroupedChargesByDistance(self,x,y):
-        error=0.00001#for floating point error in distances
+        error=self.distError#for floating point error in distances
 
         chargesByDist=self.chargesByDistance(x,y)
         groupedCharges=[]
@@ -120,20 +157,22 @@ class ChargeGrid:
         
         return correlations
     
-    def getAllCorrelationPairs(self):
+    def getAllCorrelationPairs(self,maxDist=100000,shouldCompare=lambda charge1, charge2: True ):
         pairs=[]
         for charge in self.charges:
             for otherCharge in self.charges:
-                dist=math.sqrt((charge.x-otherCharge.x)**2+(charge.y-otherCharge.y)**2)
-                correlation=charge.charge*otherCharge.charge
-                pairs.append((dist,correlation))
+                if shouldCompare(charge,otherCharge):
+                    dist=math.sqrt((charge.x-otherCharge.x)**2+(charge.y-otherCharge.y)**2)
+                    if dist<=maxDist+self.distError:
+                        correlation=charge.charge*otherCharge.charge
+                        pairs.append((dist,correlation))
         return pairs
     
-    def getOverallChargeCorrelation(self):
-        correlations=self.getAllCorrelationPairs()
+    def getOverallChargeCorrelation(self,maxDist=1000000,shouldCompare=lambda charge1, charge2: True ):
+        correlations=self.getAllCorrelationPairs(maxDist=maxDist,shouldCompare=shouldCompare)
         correlations=sorted(correlations,key=lambda el:el[0])
 
-        error=0.00000001
+        error=self.distError
         groupedCorrelations=[]
         lastDist=-100
         for dist,correlation in correlations:
@@ -273,10 +312,9 @@ class YShapeLattice:
     
     def getIslandCharge(self,row,col):
         island=self.data[row][col]
-
         return (island[TOPLEFT]+island[TOPRIGHT]+island[BOTTOM])
 
-    def draw(self,img,showIslands=True, showIslandCharge=True, showRings=False,showVertexCharge=False, halfInverted=False,armWidth=4):
+    def draw(self,img,showIslands=True, showIslandCharge=False, showRings=False,showVertexCharge=False, halfInverted=False,armWidth=2,showVector=False):
         data=self.data
 
         imageHeight,imageWidth,channels=img.shape
@@ -293,6 +331,9 @@ class YShapeLattice:
             np.array([armLength*math.cos(math.pi/2),armLength*math.sin(math.pi/2)])]
 
         ys=np.linspace(padding,imageWidth-padding,len(data)-1)
+
+        overlay=np.zeros_like(img,np.uint8)
+
         for (row,y) in enumerate(ys):
             xs=np.linspace(padding,len(data[row])*spacingX,len(data[row]))
             for (col,x) in enumerate(xs):
@@ -402,8 +443,26 @@ class YShapeLattice:
                             color=BLUE
                         if(color is not None):
                             cv2.circle(img,(int(ringxy[0]),int(ringxy[1])), int(spacingX/4), color, 2)
+                
+                if showVector:
+                    vector=getIslandMomentVector(island)
+                    start=np.array(xy)
+                    end=start+vector*spacingX/3
+                    start=start.astype(int)
+                    end=end.astype(int)
+                    #cv2.arrowedLine(img,start,end,RED,tipLength=0.2,thickness=2)
+                    #cv2.putText(img,str(getIslandAngle(island))[0:3],coord,cv2.FONT_HERSHEY_COMPLEX,0.3,RED)
+                    angle=getIslandAngle(island)
+                    color=num_to_rgb(angle,max_val=360)
+                    color=(color[0],color[1],color[2],0.1)
 
-    
+
+                    
+                    cv2.circle(overlay,start,int(spacingX/2),color,-1)
+
+        alpha=0.5
+        mask=overlay.astype(bool)
+        img[mask]=cv2.addWeighted(img,alpha,overlay,1-alpha,0)[mask]
 
     def getChargeGrid(self):
 
@@ -422,97 +481,153 @@ class YShapeLattice:
 
             for (x,col) in enumerate(row):
                 
-                chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing,self.getIslandCharge(y,x)))
+                chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing,self.getIslandCharge(y,x),type="a"))
 
                 vertexCharge=self.getVerticies(y,x)[2]
 
                 neighbors=self.getNeighbors(y,x)
 
                 if(neighbors[BOTTOMLEFTNEIGHBOR] is not None and neighbors[BOTTOMRIGHTNEIGHBOR] is not None):
-                    chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing+math.sqrt(3)/3,vertexCharge))
+                    chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing+math.sqrt(3)/3,vertexCharge,type="b"))
 
         return chargeGrid
 
 
-    """
-    def getAdjacentCharges(self,row,col,level):
-        island=self.data[row][col]
 
-        if level==1:
-            return self.getVerticies(row,col)
-        elif level==2:
-            neighborCoords=self.getNeighborsCoords(row,col)
-            neighborCoords=[el for el in neighborCoords if el is not None]
-            return [self.getIslandCharge(*coord) for coord in neighborCoords]
-        elif level==3:
-            charges=[]
-            charges.append()
-        else:
-            raise NotImplementedError();
+def chargeOrdering(y):
+    cg=y.getChargeGrid()
+    overall=cg.getOverallChargeCorrelation()
+    overall=overall[1:9]
+    print([el for el in overall])
+    plt.pyplot.plot(range(len(overall)),[el[1] for el in overall])
+    plt.pyplot.axhline(y=0, linestyle='-')
+
+    plt.pyplot.show()
+
+def drawDomains(lattice,outImg):
+    lattice.draw(outImg,showVector=True)
+    #lattice.draw(outImg,showVertexCharge=False,showIslandCharge=True,halfInverted=True)
+
+
+def renderFile(lattice,outFolder):
     
-    def getAvgAdjacentCharge(self,row,col,level):
-        return np.average(self.getAdjacentCharges(row,col,level))"""
+    blankImg=np.zeros((1000,1000,3), np.uint8)
+    blankImg[:,:]=(150,150,150)
+
+    chargeImg=blankImg.copy()
+    chargeImgHalfInverted=blankImg.copy()
+    domainImg=blankImg.copy()
+
+    drawDomains(lattice,domainImg)
+    lattice.draw(chargeImg,showIslandCharge=True,showVertexCharge=True)
+    lattice.draw(chargeImgHalfInverted,showIslandCharge=True,showVertexCharge=True,halfInverted=True)
+
+    os.makedirs(outFolder,exist_ok=True)
+    outFilePrefix=os.path.join(outFolder,fileName.split("/")[-1].split(".")[0][0:])
+    
+    cv2.imwrite(outFilePrefix+"_domains.jpg",domainImg)
+    cv2.imwrite(outFilePrefix+"_charge.jpg",chargeImg)
+    cv2.imwrite(outFilePrefix+"_chargeImgHalfInverted.jpg",chargeImgHalfInverted)
+    
+
+    #cv2.imshow("window",domainImg)
+    #cv2.waitKey(0)
 
 
 
+def getUserInputFiles():
+    parser = argparse.ArgumentParser(description='Y shaped lattice csv reader')
+    parser.add_argument("file", type=str, help="Path to csv file or folder")
+    args=parser.parse_args()
+
+    fileNames=[]
+    if os.path.isfile(args.file):
+        fileNames=[args.file]
+    elif os.path.isdir(args.file):
+        for (dirpath, dirnames, files) in os.walk(args.file):
+            for name in files:
+                fileNames.append(os.path.join(dirpath,name))
+
+    else:
+        raise Exception("path is not file or directory")
+
+    return fileNames
+
+def assertChargeCorrelationGroupIsConsistent(chargeCorrelations):
+    firstRow=chargeCorrelations[list(chargeCorrelations.keys())[0]]
+    for i in chargeCorrelations.values():
+        assert len(i)==len(firstRow)
+    for columnIndex in range(0,len(firstRow)):
+        expectedDistance=firstRow[columnIndex][0]
+        for chargeCorrelation in chargeCorrelations.values():
+            assert(abs(chargeCorrelation[columnIndex][0]-expectedDistance)<0.000001)
+def writeCorrelationsToFile(chargeCorrelations,f):
+
+    distances=[str(n[0]) for n in list(chargeCorrelations.values())[0]]
+    f.write(f"distance=, {', '.join(distances)}\n")
+    for fileName, chargeCorrelation in chargeCorrelations.items():
+        f.write(fileName+", ")
+        for pair in chargeCorrelation:
+            f.write(str(pair[1])+", ")
+
+        f.write("\n")
+    f.write("\n\n")
 if __name__=="__main__":
-    if False:
-        parser = argparse.ArgumentParser(description='Y shaped lattice csv reader')
-        parser.add_argument("file", type=str, help="Path to csv file")
-        args=parser.parse_args()
+    fileNames=getUserInputFiles()
+    
+    chargeCorrelations={}
+    AAChargeCorrelations={}
+    BBChargeCorrelations={}
+    ABChargeCorrelations={}
 
-        try:
-
-            file=open(args.file,newline="\n")
-        except:
-            raise Exception("Error with file")
+    for fileName in fileNames[0:1]:
+        print(f"analyzing: {fileName}")
         
+        try:
+            file=open(fileName,newline="\n")
+        except:
+            raise Exception("Error with file: "+str(fileName))
 
         data=getFileData(file)
+        lattice=YShapeLattice(data)
 
-        y=YShapeLattice(data)
+        #renderFile(lattice,"yShapeOut")
 
-        outputImage1=np.zeros((1000,1000,3), np.uint8)
-        outputImage1[:,:]=(150,150,150)
+        cg=lattice.getChargeGrid()
 
-        y.draw(outputImage1,showVertexCharge=True,showIslands=True,showIslandCharge=True)
+        blankImg=np.zeros((1000,1000,3), np.uint8)
+        blankImg[:,:]=(150,150,150)
+        cg.draw(blankImg,colorByType=True)
+        cv2.imwrite("test.png",blankImg)
 
-        chargeImg=np.zeros((1000,1000,3), np.uint8)
-        chargeImg[:,:]=(150,150,150)
+        chargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5)
+        AAChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="a")
+        ABChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="b")
+        BBChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="b" and j.type=="b")
+    
 
-        chargeImg_halfInverted=np.zeros((1000,1000,3), np.uint8)
-        chargeImg_halfInverted[:,:]=(150,150,150)
-
-        #cg.draw(chargeImg)
-
-        y.draw(chargeImg,showIslands=True,showVertexCharge=True,halfInverted=False)
-        y.draw(chargeImg_halfInverted,showIslands=True,showVertexCharge=True,halfInverted=True)
-
-        #cv2.imshow("window",chargeImg)
-        fileName=args.file
-        print(fileName.split(".")[0][0:]+"_charge.jpg")
-        cv2.imwrite(fileName.split(".")[0][0:]+"_charge.jpg",chargeImg)
-        cv2.imwrite(fileName.split(".")[0][0:]+"_charge_halfInverted.jpg",chargeImg_halfInverted)
-        cv2.waitKey(0)
+    assertChargeCorrelationGroupIsConsistent(chargeCorrelations)
 
 
-        """cg=y.getChargeGrid()
-        cg.draw(chargeImg)
-        overall=cg.getOverallChargeCorrelation()
-        overall=overall[1:9]
-        print([el for el in overall])
-        plt.pyplot.plot(range(len(overall)),[el[1] for el in overall])
-        plt.pyplot.axhline(y=0, linestyle='-')
 
-        plt.pyplot.show()"""
+    with open("yShapeOut/chargeCorrelation.csv", "w") as f:
+        
+        f.write("Overall Correlation\n")
+        writeCorrelationsToFile(chargeCorrelations,f)
+        f.write("AACorrelation\n")
+        writeCorrelationsToFile(AAChargeCorrelations,f)
+        f.write("AB Correlation\n")
+        writeCorrelationsToFile(ABChargeCorrelations,f)
+        f.write("BB Correlation\n")
+        writeCorrelationsToFile(BBChargeCorrelations,f)
+        
+        f.close()
+    
 
-        #cv2.imshow("grid",chargeImg)
+        
 
-            #cv2.imshow("window",outputImage1)
-        #cv2.waitKey(0)
 
-        #cv2.imwrite("analysis-output.jpg", np.float32(outputImage));
-    else:
+    """else:
         files=[
             'Y-shape(7-7-21)/206.csv',
             'Y-shape(7-7-21)/207.csv',
@@ -563,4 +678,4 @@ if __name__=="__main__":
                     print(f"{el[0]}",end=", ")
                 for el in overall:
                     print(f"{el[1]}",end=", ")
-                print("\n",end="")
+                print("\n",end="")"""
