@@ -2,6 +2,7 @@ import argparse
 from os import close
 import cv2
 import numpy as np
+import math
 
 
 #constants
@@ -74,16 +75,25 @@ class KagomeLattice():
 
     def coordInLattice(self,row,col):
         return row>0 and col>0 and row<len(self.data) and col<len(self.data[row])
+    def cellValueOrNone(self,row,col):
+        if self.coordInLattice(row,col):
+            return self.data[row][col]
+            
+        return None
     def determineAngle(self,rowI,colI):
-        angle=None
-        if self.coordInLattice(rowI-1,colI-1) and self.data[rowI-1][colI-1] is not None:
-            angle=45
-        elif self.coordInLattice(rowI-1,colI+1) and self.data[rowI-1][colI+1] is not None:
-            angle=-45
-        elif self.coordInLattice(rowI+1,colI-1) and self.data[rowI+1][colI-1] is not None:
-            angle=45
-        elif self.coordInLattice(rowI+1,colI+1) and self.data[rowI+1][colI+1] is not None:
-            angle=-45
+
+        closelySpaced=not (self.firstRowCloselySpaced ^ rowI%2==0)
+        if not closelySpaced:
+            return 90
+        else:
+            if self.cellValueOrNone(rowI-1,colI-1) is not None:
+                angle=-45
+            elif self.cellValueOrNone(rowI-1,colI+1) is not None:
+                angle=45
+            elif self.cellValueOrNone(rowI+1,colI-1) is not None:
+                angle=45
+            elif self.cellValueOrNone(rowI+1,colI+1) is not None:
+                angle=-45
 
         return angle
 
@@ -92,13 +102,18 @@ class KagomeLattice():
     def draw(self,im,border=50):
         data=self.data
 
+        lineRadius=6
+        lineWidth=5
+        r2radius=round(lineRadius*math.sqrt(2)/2)
+
         for (rowI,row) in enumerate(data):
             y=int(np.interp(rowI,[0,len(data)],[border,len(img)-border]))
-            closelySpaced=(self.firstRowCloselySpaced ^ rowI%2==0)
+            closelySpaced=not (self.firstRowCloselySpaced ^ rowI%2==0)
             for (colI,cell) in enumerate(row):
                 x=int(np.interp(colI,[0,len(row)],[border,len(img[y])-border]))
                 if cell is not None and (cell==1 or cell==-1):
-
+                    
+                    xy=np.array([x,y])
 
                     if cell==1:
                         color=BLACK
@@ -106,18 +121,27 @@ class KagomeLattice():
                         color=WHITE
 
 
-                    if closelySpaced:
-                        cv2.line(im,(x,y-4),(x,y+4),color,2)
+                    """
+                    if not closelySpaced:
+                        cv2.line(im,(x,y-lineRadius),(x,y+lineRadius),color,lineWidth)
                         
                     else:
-                        angle=self.determineAngle(y,x)
-                        print(angle)
+                        angle=self.determineAngle(rowI,colI)
                         if angle==45:
-                            cv2.line(im,(x-4,y+4),(x+4,y-4),color,2)
+                            cv2.line(im,(x-r2radius,y+r2radius),(x+r2radius,y-r2radius),color,lineWidth)
                         elif angle==-45:
-                            cv2.line(im,(x-4,y-4),(x+4,y+4),color,2)
+                            cv2.line(im,(x-r2radius,y-r2radius),(x+r2radius,y+r2radius),color,lineWidth)
                         else:
                             cv2.circle(im,(x,y),2,color,-1)
+                    """
+                    angle=self.determineAngle(rowI,colI)
+                    vector=np.array([round(2*lineRadius*math.cos(angle/180*math.pi)),-round(2*lineRadius*math.sin(angle/180*math.pi))])
+                    if cell==-1:
+                        vector*=-1
+                    cv2.arrowedLine(im,xy+vector,xy-vector,color,lineWidth,tipLength=0.2)
+                    #cv2.line(im,xy+vector,xy-vector,color,lineWidth)
+                else: 
+                    cv2.circle(im,(x,y),1,BLACK,-1)
 
 
 
@@ -132,7 +156,7 @@ if __name__ == "__main__":
     k=KagomeLattice(data)
 
     img=np.zeros((1000,1000,3),np.uint8)
-    img[:,:]=(150,150,150)
+    img[:,:]=(200,200,200)
     k.draw(img)
     cv2.imshow("window",img)
     cv2.waitKey(0)
