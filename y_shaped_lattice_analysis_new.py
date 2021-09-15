@@ -41,8 +41,9 @@ R3O2=math.sqrt(3)/2
 def getFileData(file):
     file=file.read().replace("\t","")
     
-    file=file.replace("\r\n","\n")#some systems use \r\n, others use \n
+    file=file.replace("\r","")#some systems use \r\n, others use \n
     file=file.split("\n")
+    
     file=[line.split(", ") for line in file]
     return file
 
@@ -314,7 +315,7 @@ class YShapeLattice:
         island=self.data[row][col]
         return (island[TOPLEFT]+island[TOPRIGHT]+island[BOTTOM])
 
-    def draw(self,img,showIslands=True, showIslandCharge=False, showRings=False,showVertexCharge=False, halfInverted=False,armWidth=2,showVector=False):
+    def draw(self,img,showIslands=True, showIslandCharge=False, showRings=False,showVertexCharge=False, halfInverted=False, simplifyIslands=False, armWidth=2,showVector=False):
         data=self.data
 
         imageHeight,imageWidth,channels=img.shape
@@ -365,24 +366,29 @@ class YShapeLattice:
                     nearCenter=tuple(((4*center+node)/5).astype(int))
                     node=tuple(node)
 
-                    
+                    if not simplifyIslands:
+                        if showIslands:
+                            #change arrow direction
+                            if(color==WHITE):
+                                point1=node
+                                point2=nearCenter
+                            else:
+                                point2=node
+                                point1=nearCenter
 
-                    if showIslands:
-                        #change arrow direction
-                        if(color==WHITE):
-                            point1=node
-                            point2=nearCenter
+                            if(color==GREEN):
+                                cv2.line(img,point1,point2,color,2)
+                            else:
+                                cv2.arrowedLine(img,point1,point2,color,armWidth,tipLength=spacingX/100)
                         else:
-                            point2=node
-                            point1=nearCenter
+                            cv2.line(img,node,nearCenter,BLACK,1)
 
-                        if(color==GREEN):
-                            cv2.line(img,point1,point2,color,2)
-                        else:
-                            cv2.arrowedLine(img,point1,point2,color,armWidth,tipLength=spacingX/100)
-                    else:
-                        cv2.line(img,node,nearCenter,BLACK,1)
-
+                if showIslands and simplifyIslands:
+                    vector=np.array(getIslandMomentVector(island))
+                   
+                    start=tuple((center-vector*armLength/2).astype(int))
+                    end=tuple((center+vector*armLength/2).astype(int))
+                    cv2.arrowedLine(img,start,end,BLACK,armWidth,tipLength=spacingX/100)
                 
                 if showIslandCharge:
                     charge=self.getIslandCharge(row,col)
@@ -481,13 +487,14 @@ class YShapeLattice:
 
             for (x,col) in enumerate(row):
                 
-                chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing,self.getIslandCharge(y,x),type="a"))
+                islandCharge=self.getIslandCharge(y,x)
+                if islandCharge!=0:
+                    chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing,islandCharge,type="a"))
 
                 vertexCharge=self.getVerticies(y,x)[2]
-
                 neighbors=self.getNeighbors(y,x)
 
-                if(neighbors[BOTTOMLEFTNEIGHBOR] is not None and neighbors[BOTTOMRIGHTNEIGHBOR] is not None):
+                if(vertexCharge!=0 and neighbors[BOTTOMLEFTNEIGHBOR] is not None and neighbors[BOTTOMRIGHTNEIGHBOR] is not None):
                     chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing+math.sqrt(3)/3,vertexCharge,type="b"))
 
         return chargeGrid
@@ -505,7 +512,7 @@ def chargeOrdering(y):
     plt.pyplot.show()
 
 def drawDomains(lattice,outImg):
-    lattice.draw(outImg,showVector=True)
+    lattice.draw(outImg,showVector=True,simplifyIslands=True)
     #lattice.draw(outImg,showVertexCharge=False,showIslandCharge=True,halfInverted=True)
 
 
@@ -517,10 +524,12 @@ def renderFile(lattice,outFolder):
     chargeImg=blankImg.copy()
     chargeImgHalfInverted=blankImg.copy()
     domainImg=blankImg.copy()
+    ringImg=blankImg.copy()
 
     drawDomains(lattice,domainImg)
     lattice.draw(chargeImg,showIslandCharge=True,showVertexCharge=True)
     lattice.draw(chargeImgHalfInverted,showIslandCharge=True,showVertexCharge=True,halfInverted=True)
+    lattice.draw(ringImg,showRings=True)
 
     os.makedirs(outFolder,exist_ok=True)
     outFilePrefix=os.path.join(outFolder,fileName.split("/")[-1].split(".")[0][0:])
@@ -528,6 +537,7 @@ def renderFile(lattice,outFolder):
     cv2.imwrite(outFilePrefix+"_domains.jpg",domainImg)
     cv2.imwrite(outFilePrefix+"_charge.jpg",chargeImg)
     cv2.imwrite(outFilePrefix+"_chargeImgHalfInverted.jpg",chargeImgHalfInverted)
+    cv2.imwrite(outFilePrefix+"_rings.jpg",ringImg)
     
 
     #cv2.imshow("window",domainImg)
@@ -573,14 +583,18 @@ def writeCorrelationsToFile(chargeCorrelations,f):
         f.write("\n")
     f.write("\n\n")
 if __name__=="__main__":
-    fileNames=getUserInputFiles()
+    GEN_CHARGE_CORRELATION=False
+
+
+    fileNames=sorted(getUserInputFiles())
+
     
     chargeCorrelations={}
     AAChargeCorrelations={}
     BBChargeCorrelations={}
     ABChargeCorrelations={}
 
-    for fileName in fileNames[0:1]:
+    for fileName in fileNames:
         print(f"analyzing: {fileName}")
         
         try:
@@ -591,37 +605,42 @@ if __name__=="__main__":
         data=getFileData(file)
         lattice=YShapeLattice(data)
 
-        #renderFile(lattice,"yShapeOut")
+        renderFile(lattice,"yShapeOut")
 
         cg=lattice.getChargeGrid()
 
         blankImg=np.zeros((1000,1000,3), np.uint8)
         blankImg[:,:]=(150,150,150)
-        cg.draw(blankImg,colorByType=True)
-        cv2.imwrite("test.png",blankImg)
+        cg.draw(blankImg,colorByType=False)
+        #cv2.imwrite("test"+fileName[-7:-4]+".png",blankImg)
 
-        chargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5)
-        AAChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="a")
-        ABChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="b")
-        BBChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="b" and j.type=="b")
-    
+        if GEN_CHARGE_CORRELATION:
+            chargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5)
+            AAChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="a")
+            ABChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="b")
+            BBChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="b" and j.type=="b")
+            
 
-    assertChargeCorrelationGroupIsConsistent(chargeCorrelations)
+    if GEN_CHARGE_CORRELATION:
+        assertChargeCorrelationGroupIsConsistent(chargeCorrelations)
+        assertChargeCorrelationGroupIsConsistent(AAChargeCorrelations)
+        assertChargeCorrelationGroupIsConsistent(ABChargeCorrelations)
+        assertChargeCorrelationGroupIsConsistent(BBChargeCorrelations)
 
 
 
-    with open("yShapeOut/chargeCorrelation.csv", "w") as f:
-        
-        f.write("Overall Correlation\n")
-        writeCorrelationsToFile(chargeCorrelations,f)
-        f.write("AACorrelation\n")
-        writeCorrelationsToFile(AAChargeCorrelations,f)
-        f.write("AB Correlation\n")
-        writeCorrelationsToFile(ABChargeCorrelations,f)
-        f.write("BB Correlation\n")
-        writeCorrelationsToFile(BBChargeCorrelations,f)
-        
-        f.close()
+        with open("yShapeOut/chargeCorrelation.csv", "w") as f:
+            
+            f.write("Overall Correlation\n")
+            writeCorrelationsToFile(chargeCorrelations,f)
+            f.write("AACorrelation\n")
+            writeCorrelationsToFile(AAChargeCorrelations,f)
+            f.write("AB Correlation\n")
+            writeCorrelationsToFile(ABChargeCorrelations,f)
+            f.write("BB Correlation\n")
+            writeCorrelationsToFile(BBChargeCorrelations,f)
+            
+            f.close()
     
 
         
