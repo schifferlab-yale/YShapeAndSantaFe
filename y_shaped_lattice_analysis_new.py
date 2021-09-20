@@ -47,6 +47,10 @@ def getFileData(file):
     file=[line.split(", ") for line in file]
     return file
 
+
+
+
+
 #basic class for the chargegrid
 class Charge:
     def __init__(self,x,y,charge,type=None):
@@ -57,6 +61,23 @@ class Charge:
     def __repr__(self):
         return f"{self.charge}"
         return f"{self.charge} at {self.x},{self.y}"
+
+class Moment:
+    def __init__(self,x,y,angle,magnitude):
+        self.x=x
+        self.y=y
+        self.angle=angle
+        self.magnitude=magnitude
+
+    def __repr__(self):
+        return f"{self.x},{self.y}"
+
+    @property
+    def positiveAngle(self):
+        if(self.angle<0):
+            return 2*math.pi-self.angle
+        else:
+            return self.angle
 
 #gets a numpy array [x,y] for the moment direction of an island
 def getIslandMomentVector(island):
@@ -72,6 +93,11 @@ def getIslandAngle(island):
     angle=int(angleRad/(2*math.pi)*360)
     return angle
 
+def getIslandAngleRad(island):
+    vector=getIslandMomentVector(island)
+    angleRad=math.atan2(vector[1],vector[0])
+    return angleRad
+
 #https://stackoverflow.com/questions/57400584/how-to-map-a-range-of-numbers-to-rgb-in-python
 def num_to_rgb(val, max_val=1):
     i = (val * 255 / max_val);
@@ -79,6 +105,103 @@ def num_to_rgb(val, max_val=1):
     g = round(math.sin(0.024 * i + 2) * 127 + 128);
     b = round(math.sin(0.024 * i + 4) * 127 + 128);
     return (r,g,b)
+
+
+class MomentGrid:
+    def __init__(self):
+        self.moments=[]
+        self.distError=0.00000001
+    
+    def addMoment(self,moment):
+        self.moments.append(moment)
+    
+    def draw(self,img,padding=50):
+        xS=[moment.x for moment in self.moments]
+        yS=[moment.y for moment in self.moments]
+        minX=np.min(xS)
+        maxX=np.max(xS)
+        minY=np.min(yS)
+        maxY=np.max(yS)
+
+        height,width,channels=img.shape
+
+        imgMinX=padding
+        imgMinY=padding
+        imgMaxX=width-padding
+        imgMaxY=height-padding
+
+        imgMax=min(imgMaxX,imgMaxY)
+        imgMin=max(imgMinY,imgMinX)
+
+        for moment in self.moments:
+            imgX=np.interp(moment.x,[minX,maxX], [imgMin,imgMax])
+            imgY=np.interp(moment.y,[minY,maxY], [imgMin,imgMax])
+
+            spacing=(imgMax-imgMin)/math.sqrt(len(self.moments))
+
+            cv2.circle(img,(int(imgX),int(imgY)),2,  BLACK,-1)
+
+            arrowLength=spacing/4
+
+            """testing"""
+            #groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
+
+            #print(nearest)
+
+            #cv2.putText(img,str(len(nearest)),(int(imgX+2),int(imgY-2)),cv2.FONT_HERSHEY_COMPLEX, 0.3, BLACK)
+        
+            start=(int(imgX+math.cos(moment.angle)*arrowLength),int(imgY+math.sin(moment.angle)*arrowLength))
+            end=(int(imgX-math.cos(moment.angle)*arrowLength),int(imgY-math.sin(moment.angle)*arrowLength))
+            cv2.arrowedLine(img,start,end,BLACK,2,tipLength=0.2)
+    
+    #get all the moments sorted by their distance from (x,y)
+    def momentsByDistance(self,x,y):
+        out=[]
+        for moment in self.moments:
+            dist=math.sqrt((moment.x-x)**2+(moment.y-y)**2)
+            out.append((dist,moment))
+
+        out=sorted(out,key=lambda el:el[0])
+        return out
+    
+    #group moments by their distance from a given point 
+    def getGroupedMomentsByDistance(self,x,y):
+        error=self.distError#for floating point error in distances
+
+        momentsByDist=self.momentsByDistance(x,y)
+        groupedMoments=[]
+        lastDist=-100
+        for dist,moment in momentsByDist:
+            if abs(dist-lastDist)<error:
+                groupedMoments[-1][1].append(moment)
+            else:
+                groupedMoments.append((dist,[moment]))
+                lastDist=dist
+
+        return groupedMoments
+
+    def getNthClosestMoments(self,x,y,n):
+        return self.getGroupedMomentsByDistance(x,y)[n][1]
+
+    def getRelativeAngleVsDistance(self):
+        maxNAway=4#exclusive 
+        angleDiffSum=[0]*maxNAway
+        angleDiffCount=[0]*maxNAway
+        for moment in self.moments:
+            groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
+
+            for n in range(0,maxNAway):
+                otherMoments=groups[n][1]
+                for otherMoment in otherMoments:
+                    angleDiffSum[n]+=otherMoment.positiveAngle-moment.positiveAngle
+                    angleDiffCount[n]+=1
+        
+
+        angleDiffAvg=[angleDiffSum[i]/angleDiffCount[i] for i in range(maxNAway)]
+        return angleDiffAvg
+                
+
+
 
 #stores a list of "Charge" instances and their locations
 class ChargeGrid:
@@ -471,14 +594,13 @@ class YShapeLattice:
         img[mask]=cv2.addWeighted(img,alpha,overlay,1-alpha,0)[mask]
 
     def getChargeGrid(self):
+        #WARNING: has some duplicate code with getVectorGrid
 
         vSpacing=math.sqrt(3)/2
 
         chargeGrid=ChargeGrid()
 
         for (y,row) in enumerate(self.data):
-
-            
             thisRowOffset=self.isRowOffset(y)
             if thisRowOffset:
                 xOffset=0.5
@@ -498,6 +620,30 @@ class YShapeLattice:
                     chargeGrid.addCharge(Charge(x+xOffset,y*vSpacing+math.sqrt(3)/3,vertexCharge,type="b"))
 
         return chargeGrid
+
+    def getMomentGrid(self):
+        #WARNING: has some duplicate code with getCHargeGrid
+        vSpacing=math.sqrt(3)/2
+
+        moments=MomentGrid()
+
+        for (y,row) in enumerate(self.data):
+            thisRowOffset=self.isRowOffset(y)
+            if thisRowOffset:
+                xOffset=0.5
+            else:
+                xOffset=0
+
+            for (x,island) in enumerate(row):
+                realX=x+xOffset
+                realY=y*vSpacing
+
+                angle=getIslandAngleRad(island)
+                moments.addMoment(Moment(realX,realY,angle,1))
+        return moments
+
+
+        
 
 
 
@@ -583,118 +729,87 @@ def writeCorrelationsToFile(chargeCorrelations,f):
         f.write("\n")
     f.write("\n\n")
 if __name__=="__main__":
-    GEN_CHARGE_CORRELATION=False
 
 
-    fileNames=sorted(getUserInputFiles())
+    if False:
+        GEN_CHARGE_CORRELATION=False
 
-    
-    chargeCorrelations={}
-    AAChargeCorrelations={}
-    BBChargeCorrelations={}
-    ABChargeCorrelations={}
-
-    for fileName in fileNames:
-        print(f"analyzing: {fileName}")
-        
-        try:
-            file=open(fileName,newline="\n")
-        except:
-            raise Exception("Error with file: "+str(fileName))
-
-        data=getFileData(file)
-        lattice=YShapeLattice(data)
-
-        renderFile(lattice,"yShapeOut")
-
-        cg=lattice.getChargeGrid()
-
-        blankImg=np.zeros((1000,1000,3), np.uint8)
-        blankImg[:,:]=(150,150,150)
-        cg.draw(blankImg,colorByType=False)
-        #cv2.imwrite("test"+fileName[-7:-4]+".png",blankImg)
-
-        if GEN_CHARGE_CORRELATION:
-            chargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5)
-            AAChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="a")
-            ABChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="b")
-            BBChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="b" and j.type=="b")
-            
-
-    if GEN_CHARGE_CORRELATION:
-        assertChargeCorrelationGroupIsConsistent(chargeCorrelations)
-        assertChargeCorrelationGroupIsConsistent(AAChargeCorrelations)
-        assertChargeCorrelationGroupIsConsistent(ABChargeCorrelations)
-        assertChargeCorrelationGroupIsConsistent(BBChargeCorrelations)
-
-
-
-        with open("yShapeOut/chargeCorrelation.csv", "w") as f:
-            
-            f.write("Overall Correlation\n")
-            writeCorrelationsToFile(chargeCorrelations,f)
-            f.write("AACorrelation\n")
-            writeCorrelationsToFile(AAChargeCorrelations,f)
-            f.write("AB Correlation\n")
-            writeCorrelationsToFile(ABChargeCorrelations,f)
-            f.write("BB Correlation\n")
-            writeCorrelationsToFile(BBChargeCorrelations,f)
-            
-            f.close()
-    
+        fileNames=sorted(getUserInputFiles())
 
         
+        chargeCorrelations={}
+        AAChargeCorrelations={}
+        BBChargeCorrelations={}
+        ABChargeCorrelations={}
 
-
-    """else:
-        files=[
-            'Y-shape(7-7-21)/206.csv',
-            'Y-shape(7-7-21)/207.csv',
-            'Y-shape(7-7-21)/208.csv',
-            'Y-shape(7-7-21)/209.csv',
-            'Y-shape(7-7-21)/210.csv',
-            'Y-shape(7-7-21)/211.csv',
-            'Y-shape(7-7-21)/215.csv',
-            'Y-shape(7-7-21)/216.csv',
-            'Y-shape(7-7-21)/217.csv',
-        ]
-        for fileName in files:
-            file=open(fileName,newline="\n")
+        for fileName in fileNames:
+            print(f"analyzing: {fileName}")
+            
+            try:
+                file=open(fileName,newline="\n")
+            except:
+                raise Exception("Error with file: "+str(fileName))
 
             data=getFileData(file)
-            y=YShapeLattice(data)
-            cg=y.getChargeGrid()
+            lattice=YShapeLattice(data)
 
-            chargeImg=np.zeros((1000,1000,3), np.uint8)
-            chargeImg[:,:]=(150,150,150)
+            renderFile(lattice,"yShapeOut")
 
-            chargeImg_halfInverted=np.zeros((1000,1000,3), np.uint8)
-            chargeImg_halfInverted[:,:]=(150,150,150)
+            cg=lattice.getChargeGrid()
 
-            ringImg=np.zeros((1000,1000,3), np.uint8)
-            ringImg[:,:]=(150,150,150)
+            blankImg=np.zeros((1000,1000,3), np.uint8)
+            blankImg[:,:]=(150,150,150)
+            cg.draw(blankImg,colorByType=False)
+            #cv2.imwrite("test"+fileName[-7:-4]+".png",blankImg)
 
-            #cg.draw(chargeImg)
+            if GEN_CHARGE_CORRELATION:
+                chargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5)
+                AAChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="a")
+                ABChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="a" and j.type=="b")
+                BBChargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5,shouldCompare=lambda i,j: i.type=="b" and j.type=="b")
+                
 
-            y.draw(chargeImg,showIslands=True,showVertexCharge=True,halfInverted=False)
-            y.draw(chargeImg_halfInverted,showIslands=True,showVertexCharge=True,halfInverted=True)
-            y.draw(ringImg,showIslands=True,showRings=True,showIslandCharge=False,armWidth=2)
-
-            #cv2.imshow("window",chargeImg)
-            #print(fileName.split(".")[0][0:]+"_charge.jpg")
-            cv2.imwrite(fileName.split(".")[0][0:]+"_charge.jpg",chargeImg)
-            cv2.imwrite(fileName.split(".")[0][0:]+"_charge_halfInverted.jpg",chargeImg_halfInverted)
-            cv2.imwrite(fileName.split(".")[0][0:]+"_rings.jpg",ringImg)
-            #cv2.waitKey(0)
+        if GEN_CHARGE_CORRELATION:
+            assertChargeCorrelationGroupIsConsistent(chargeCorrelations)
+            assertChargeCorrelationGroupIsConsistent(AAChargeCorrelations)
+            assertChargeCorrelationGroupIsConsistent(ABChargeCorrelations)
+            assertChargeCorrelationGroupIsConsistent(BBChargeCorrelations)
 
 
-            if (True):#charge correlation
-                overall=cg.getOverallChargeCorrelation()
-                overall=overall[1:11]
 
-                print(fileName,end=", ")
-                for el in overall:
-                    print(f"{el[0]}",end=", ")
-                for el in overall:
-                    print(f"{el[1]}",end=", ")
-                print("\n",end="")"""
+            with open("yShapeOut/chargeCorrelation.csv", "w") as f:
+                
+                f.write("Overall Correlation\n")
+                writeCorrelationsToFile(chargeCorrelations,f)
+                f.write("AACorrelation\n")
+                writeCorrelationsToFile(AAChargeCorrelations,f)
+                f.write("AB Correlation\n")
+                writeCorrelationsToFile(ABChargeCorrelations,f)
+                f.write("BB Correlation\n")
+                writeCorrelationsToFile(BBChargeCorrelations,f)
+                
+                f.close()
+    
+
+    else:
+        fileNames=sorted(getUserInputFiles())
+        for fileName in fileNames:
+            try:
+                file=open(fileName,newline="\n")
+            except:
+                raise Exception("Error with file: "+str(fileName))
+
+            data=getFileData(file)
+            lattice=YShapeLattice(data)
+            
+            moments=lattice.getMomentGrid()
+
+
+            blankImg=np.zeros((1000,1000,3), np.uint8)
+            blankImg[:,:]=(150,150,150)
+            moments.draw(blankImg)
+
+            print(moments.getRelativeAngleVsDistance())
+
+            cv2.imwrite("img.png",blankImg)
+
