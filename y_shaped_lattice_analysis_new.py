@@ -72,13 +72,8 @@ class Moment:
     def __repr__(self):
         return f"{self.x},{self.y}"
 
-    @property
-    def positiveAngle(self):
-        if(self.angle<0):
-            return 2*math.pi-self.angle
-        else:
-            return self.angle
-
+def angleDotProduct(angle1,angle2):
+    return math.cos(angle1-angle2)
 #gets a numpy array [x,y] for the moment direction of an island
 def getIslandMomentVector(island):
     topLeft=np.array([-R3O2,-0.5])*-island[TOPLEFT]
@@ -187,18 +182,28 @@ class MomentGrid:
         maxNAway=4#exclusive 
         angleDiffSum=[0]*maxNAway
         angleDiffCount=[0]*maxNAway
+
+        angleCounts=[{}]*maxNAway
         for moment in self.moments:
             groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
 
             for n in range(0,maxNAway):
                 otherMoments=groups[n][1]
                 for otherMoment in otherMoments:
-                    angleDiffSum[n]+=otherMoment.positiveAngle-moment.positiveAngle
+                    dotProduct=angleDotProduct(otherMoment.angle,moment.angle)
+                    angleDiffSum[n]+=dotProduct
                     angleDiffCount[n]+=1
-        
 
+                    if dotProduct in angleCounts[n].keys():
+                        angleCounts[n][dotProduct]+=1
+                    else:
+                        angleCounts[n][dotProduct]=1
+                   
+
+
+        
         angleDiffAvg=[angleDiffSum[i]/angleDiffCount[i] for i in range(maxNAway)]
-        return angleDiffAvg
+        return angleCounts[0]
                 
 
 

@@ -1,4 +1,4 @@
-import y_shaped_lattice_analysis
+
 import random
 import cv2
 
@@ -66,11 +66,11 @@ def randomLattice(width,height,allow3InOut=True):
 
 if __name__=="__main__":
     lattice=randomLattice(50,50,allow3InOut=False)
-    img,stats=y_shaped_lattice_analysis.analyze(lattice)
-    print(stats)
+    #img,stats=y_shaped_lattice_analysis.analyze(lattice)
+    #print(stats)
 
-    cv2.imshow("window",img)
-    cv2.waitKey(0)
+    #cv2.imshow("window",img)
+    #cv2.waitKey(0)
 
     with open('randomLattice.csv', 'w') as file:
 
