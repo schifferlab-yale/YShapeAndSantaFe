@@ -74,8 +74,17 @@ class Moment:
 
 def angleDotProduct(angle1,angle2):
     return math.cos(angle1-angle2)
+
+def isBadIsland(island):
+    for arm in island:
+        if arm==0:
+            return True
+    return False
+
 #gets a numpy array [x,y] for the moment direction of an island
 def getIslandMomentVector(island):
+    if isBadIsland(island):
+        return None
     topLeft=np.array([-R3O2,-0.5])*-island[TOPLEFT]
     topRight=np.array([R3O2,-0.5])*-island[TOPRIGHT]
     bottom=np.array([0,1])*-island[BOTTOM]
@@ -89,6 +98,8 @@ def getIslandAngle(island):
     return angle
 
 def getIslandAngleRad(island):
+    if isBadIsland(island):
+        return None
     vector=getIslandMomentVector(island)
     angleRad=math.atan2(vector[1],vector[0])
     return angleRad
@@ -144,7 +155,7 @@ class MomentGrid:
             #print(nearest)
 
             #cv2.putText(img,str(len(nearest)),(int(imgX+2),int(imgY-2)),cv2.FONT_HERSHEY_COMPLEX, 0.3, BLACK)
-        
+
             start=(int(imgX+math.cos(moment.angle)*arrowLength),int(imgY+math.sin(moment.angle)*arrowLength))
             end=(int(imgX-math.cos(moment.angle)*arrowLength),int(imgY-math.sin(moment.angle)*arrowLength))
             cv2.arrowedLine(img,start,end,BLACK,2,tipLength=0.2)
@@ -178,19 +189,23 @@ class MomentGrid:
     def getNthClosestMoments(self,x,y,n):
         return self.getGroupedMomentsByDistance(x,y)[n][1]
 
-    def getRelativeAngleVsDistance(self):
-        maxNAway=4#exclusive 
+    def getRelativeAngleVsDistance(self,maxNAway):
+
+
         angleDiffSum=[0]*maxNAway
         angleDiffCount=[0]*maxNAway
 
-        angleCounts=[{}]*maxNAway
+        angleCounts=[]
+        for i in range(maxNAway):angleCounts.append({})
+
         for moment in self.moments:
             groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
-
-            for n in range(0,maxNAway):
+            for n in range(maxNAway):
                 otherMoments=groups[n][1]
                 for otherMoment in otherMoments:
-                    dotProduct=angleDotProduct(otherMoment.angle,moment.angle)
+                    
+                    dotProduct=round(angleDotProduct(otherMoment.angle,moment.angle),3)
+
                     angleDiffSum[n]+=dotProduct
                     angleDiffCount[n]+=1
 
@@ -198,12 +213,12 @@ class MomentGrid:
                         angleCounts[n][dotProduct]+=1
                     else:
                         angleCounts[n][dotProduct]=1
+            
                    
 
 
         
-        angleDiffAvg=[angleDiffSum[i]/angleDiffCount[i] for i in range(maxNAway)]
-        return angleCounts[0]
+        return angleCounts
                 
 
 
@@ -643,8 +658,10 @@ class YShapeLattice:
                 realX=x+xOffset
                 realY=y*vSpacing
 
-                angle=getIslandAngleRad(island)
-                moments.addMoment(Moment(realX,realY,angle,1))
+                if not isBadIsland(island):
+                    angle=getIslandAngleRad(island)
+                    moments.addMoment(Moment(realX,realY,angle,1))
+
         return moments
 
 
@@ -736,8 +753,10 @@ def writeCorrelationsToFile(chargeCorrelations,f):
 if __name__=="__main__":
 
 
-    if False:
+    if True:
         GEN_CHARGE_CORRELATION=False
+        RENDER_FILES=False
+        RUN_RELATIVE_ANGLE=True
 
         fileNames=sorted(getUserInputFiles())
 
@@ -746,6 +765,8 @@ if __name__=="__main__":
         AAChargeCorrelations={}
         BBChargeCorrelations={}
         ABChargeCorrelations={}
+
+        relativeAngleVsDistance={}
 
         for fileName in fileNames:
             print(f"analyzing: {fileName}")
@@ -758,14 +779,19 @@ if __name__=="__main__":
             data=getFileData(file)
             lattice=YShapeLattice(data)
 
-            renderFile(lattice,"yShapeOut")
+            if RUN_RELATIVE_ANGLE:
+                moments=lattice.getMomentGrid()
+                relativeAngleVsDistance[fileName]=moments.getRelativeAngleVsDistance(2)
 
-            cg=lattice.getChargeGrid()
+            if RENDER_FILES:
+                renderFile(lattice,"yShapeOut")
 
-            blankImg=np.zeros((1000,1000,3), np.uint8)
-            blankImg[:,:]=(150,150,150)
-            cg.draw(blankImg,colorByType=False)
-            #cv2.imwrite("test"+fileName[-7:-4]+".png",blankImg)
+                cg=lattice.getChargeGrid()
+
+                blankImg=np.zeros((1000,1000,3), np.uint8)
+                blankImg[:,:]=(150,150,150)
+                cg.draw(blankImg,colorByType=False)
+                #cv2.imwrite("test"+fileName[-7:-4]+".png",blankImg)
 
             if GEN_CHARGE_CORRELATION:
                 chargeCorrelations[fileName]=cg.getOverallChargeCorrelation(maxDist=5)
@@ -796,6 +822,23 @@ if __name__=="__main__":
                 f.close()
     
 
+        if RUN_RELATIVE_ANGLE:
+            with open("yShapeOut/relativeAngleVsDist.csv", "w") as f:
+                f.write("file name, n, -1, -0.5, 0.5, 1\n")
+
+                for fileName,values in relativeAngleVsDistance.items():
+                    for n in range(1,len(values)):
+                        f.write(fileName+", "+str(n)+", ")
+                        
+                        for val in [-1, -0.5, 0.5, 1]:
+                            if val in values[n]:
+                                f.write(str(values[n][val])+", ")
+                            else:
+                                f.write("0, ")
+
+                        f.write("\n")
+                    
+
     else:
         fileNames=sorted(getUserInputFiles())
         for fileName in fileNames:
@@ -815,6 +858,7 @@ if __name__=="__main__":
             moments.draw(blankImg)
 
             print(moments.getRelativeAngleVsDistance())
+            
 
             cv2.imwrite("img.png",blankImg)
 
