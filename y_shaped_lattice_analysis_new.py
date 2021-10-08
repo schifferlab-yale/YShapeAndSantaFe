@@ -97,12 +97,20 @@ def getIslandAngle(island):
     angle=int(angleRad/(2*math.pi)*360)
     return angle
 
+def restrictAngleRad(angle):
+    while angle<0:
+        angle+=2*math.pi;
+    while angle>=2*math.pi:
+        angle-=2*math.pi
+    return angle
+
 def getIslandAngleRad(island):
     if isBadIsland(island):
         return None
     vector=getIslandMomentVector(island)
     angleRad=math.atan2(vector[1],vector[0])
     return angleRad
+
 
 #https://stackoverflow.com/questions/57400584/how-to-map-a-range-of-numbers-to-rgb-in-python
 def num_to_rgb(val, max_val=1):
@@ -204,22 +212,74 @@ class MomentGrid:
                 otherMoments=groups[n][1]
                 for otherMoment in otherMoments:
                     
-                    dotProduct=round(angleDotProduct(otherMoment.angle,moment.angle),3)
+                    angle=round(180/math.pi*restrictAngleRad(otherMoment.angle-moment.angle))
 
-                    angleDiffSum[n]+=dotProduct
+                    angleDiffSum[n]+=angle
                     angleDiffCount[n]+=1
 
-                    if dotProduct in angleCounts[n].keys():
-                        angleCounts[n][dotProduct]+=1
+                    if angle in angleCounts[n].keys():
+                        angleCounts[n][angle]+=1
                     else:
-                        angleCounts[n][dotProduct]=1
+                        angleCounts[n][angle]=1
             
-                   
-
-
-        
+                
         return angleCounts
                 
+    def getCorrelationVsDistance(self,maxNAway):
+        correlationCount=[0]*maxNAway
+        correlationSum=[0]*maxNAway
+
+        for moment in self.moments:
+            groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
+            for n in range(maxNAway):
+                otherMoments=groups[n][1]
+                for otherMoment in otherMoments:
+                    
+                    dotProduct=angleDotProduct(otherMoment.angle,moment.angle)
+
+                    correlationSum[n]+=dotProduct
+                    correlationCount[n]+=1
+        
+        correlation=[correlationSum[i]/correlationCount[i] for i in range(n)]
+        return correlation
+
+    def getCorrelationVsAbsoluteAngle(self,maxNAway):
+        #correlationVsAngle[integer distance][angle]
+
+        correlationSums=[]
+        correlationCounts=[]
+        for i in range(maxNAway):correlationSums.append({})
+        for i in range(maxNAway):correlationCounts.append({})
+
+        for moment in self.moments:
+            groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
+            for n in range(maxNAway):
+                otherMoments=groups[n][1]
+                for otherMoment in otherMoments:
+                    directionVector=(otherMoment.y-moment.y,otherMoment.x-moment.x)
+                    relativeAngle=round(restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))*180/math.pi,2)
+                    
+                    dotProduct=angleDotProduct(otherMoment.angle,moment.angle)
+
+                    if relativeAngle in correlationCounts[n].keys():
+                        correlationCounts[n][relativeAngle]+=1
+                        correlationSums[n][relativeAngle]+=dotProduct
+                    else:
+                        correlationCounts[n][relativeAngle]=1
+                        correlationSums[n][relativeAngle]=dotProduct
+        
+
+        correlations=[]
+        for i in range(len(correlationCounts)):
+            correlations.append({})
+            for key in correlationCounts[i].keys():
+                correlations[i][key]=correlationSums[i][key]/correlationCounts[i][key]
+        
+        return correlations
+
+
+
+
 
 
 
@@ -750,13 +810,14 @@ def writeCorrelationsToFile(chargeCorrelations,f):
 
         f.write("\n")
     f.write("\n\n")
+
 if __name__=="__main__":
-
-
     if True:
         GEN_CHARGE_CORRELATION=False
         RENDER_FILES=False
-        RUN_RELATIVE_ANGLE=True
+        RUN_RELATIVE_ANGLE=False
+        RUN_CORRELATION_VS_DISTANCE=False
+        RUN_CORRELATION_VS_ANGLE=True
 
         fileNames=sorted(getUserInputFiles())
 
@@ -767,6 +828,8 @@ if __name__=="__main__":
         ABChargeCorrelations={}
 
         relativeAngleVsDistance={}
+        correlationVsDistance={}
+        correlationVsAngle={}
 
         for fileName in fileNames:
             print(f"analyzing: {fileName}")
@@ -779,9 +842,17 @@ if __name__=="__main__":
             data=getFileData(file)
             lattice=YShapeLattice(data)
 
+
+            moments=lattice.getMomentGrid()
+
             if RUN_RELATIVE_ANGLE:
-                moments=lattice.getMomentGrid()
                 relativeAngleVsDistance[fileName]=moments.getRelativeAngleVsDistance(2)
+
+            if RUN_CORRELATION_VS_DISTANCE:
+                correlationVsDistance[fileName]=moments.getCorrelationVsDistance(10)
+
+            if RUN_CORRELATION_VS_ANGLE:
+                correlationVsAngle[fileName]=moments.getCorrelationVsAbsoluteAngle(5)
 
             if RENDER_FILES:
                 renderFile(lattice,"yShapeOut")
@@ -823,20 +894,45 @@ if __name__=="__main__":
     
 
         if RUN_RELATIVE_ANGLE:
+            print(relativeAngleVsDistance)
             with open("yShapeOut/relativeAngleVsDist.csv", "w") as f:
-                f.write("file name, n, -1, -0.5, 0.5, 1\n")
+                f.write("file name, n, 0,60,120,180,240,300\n")
 
                 for fileName,values in relativeAngleVsDistance.items():
                     for n in range(1,len(values)):
                         f.write(fileName+", "+str(n)+", ")
                         
-                        for val in [-1, -0.5, 0.5, 1]:
+                        for val in [0,60,120,180,240,300]:
                             if val in values[n]:
                                 f.write(str(values[n][val])+", ")
                             else:
                                 f.write("0, ")
 
                         f.write("\n")
+
+        if RUN_CORRELATION_VS_ANGLE:
+            with open("yShapeOut/correlationVsRelativeAngle.csv", "w") as f:
+                f.write("file name, distance, angle1, correlation1, angle2, correlation2, angle3, correlation3, ...\n")
+                for fileName,values in sorted(correlationVsAngle.items()):
+                    for n in range(1,len(values)):
+                        f.write(fileName+", "+str(n)+", ")
+                        for angle in sorted(values[n].keys()):
+                            f.write(str(angle)+", "+str(values[n][angle])+", ")
+
+
+                        f.write("\n")
+        
+        if RUN_CORRELATION_VS_DISTANCE:
+            with open("yShapeOut/correlationVsDist.csv","w") as f:
+                f.write(f"file, n=0, n=1, n=2, ...\n")
+
+                for fileName,values in correlationVsDistance.items():
+                    f.write(f"{fileName}, ")
+                    for value in values:
+                        f.write(f"{value}, ")
+                    f.write("\n")
+
+            
                     
 
     else:
@@ -857,8 +953,6 @@ if __name__=="__main__":
             blankImg[:,:]=(150,150,150)
             moments.draw(blankImg)
 
-            print(moments.getRelativeAngleVsDistance())
-            
+            print(moments.getCorrelationVsDistance(20))
 
-            cv2.imwrite("img.png",blankImg)
 
