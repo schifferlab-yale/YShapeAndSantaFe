@@ -62,6 +62,7 @@ class Charge:
         return f"{self.charge}"
         return f"{self.charge} at {self.x},{self.y}"
 
+#basic moment class for MomentGrid
 class Moment:
     def __init__(self,x,y,angle,magnitude):
         self.x=x
@@ -72,9 +73,10 @@ class Moment:
     def __repr__(self):
         return f"{self.x},{self.y}"
 
-def angleDotProduct(angle1,angle2):
+def angleDotProductRad(angle1,angle2):
     return math.cos(angle1-angle2)
 
+#island has any 0s in it (bad data)
 def isBadIsland(island):
     for arm in island:
         if arm==0:
@@ -93,10 +95,13 @@ def getIslandMomentVector(island):
 #gets angle of island moment vector (in degrees)
 def getIslandAngle(island):
     vector=getIslandMomentVector(island)
+    if vector[0]==0 and vector[1]==0:
+        return None
     angleRad=math.atan2(vector[1],vector[0])
     angle=int(angleRad/(2*math.pi)*360)
     return angle
 
+#restricts a number to be in between [0,2pi)
 def restrictAngleRad(angle):
     while angle<0:
         angle+=2*math.pi;
@@ -104,10 +109,13 @@ def restrictAngleRad(angle):
         angle-=2*math.pi
     return angle
 
+#converts an island to an angle
 def getIslandAngleRad(island):
     if isBadIsland(island):
         return None
     vector=getIslandMomentVector(island)
+    if vector[0]==0 and vector[1]==0:
+        return None
     angleRad=math.atan2(vector[1],vector[0])
     return angleRad
 
@@ -197,7 +205,7 @@ class MomentGrid:
     def getNthClosestMoments(self,x,y,n):
         return self.getGroupedMomentsByDistance(x,y)[n][1]
 
-    def getRelativeAngleVsDistance(self,maxNAway):
+    """def getRelativeAngleVsDistance(self,maxNAway):
 
 
         angleDiffSum=[0]*maxNAway
@@ -209,10 +217,15 @@ class MomentGrid:
         for moment in self.moments:
             groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
             for n in range(maxNAway):
+                if moment.angle is None:
+                    continue
+
                 otherMoments=groups[n][1]
                 for otherMoment in otherMoments:
-                    
+                    if otherMoment.angle is None:
+                        continue
                     angle=round(180/math.pi*restrictAngleRad(otherMoment.angle-moment.angle))
+                    print(angle)
 
                     angleDiffSum[n]+=angle
                     angleDiffCount[n]+=1
@@ -222,25 +235,95 @@ class MomentGrid:
                     else:
                         angleCounts[n][angle]=1
             
-                
-        return angleCounts
+        anglePercent=[]
+        for counts in angleCounts:
+            total=0
+            for key in counts.keys():
+                total+=counts[key]
+            dict={}
+            for key in counts.keys():
+                dict[key]=counts[key]/total
+            anglePercent.append(dict)
+
+        return anglePercent"""
+
+
+    def getCorrelationByOffsetAngle(self):
+
+        #format: data[centerMomentAngle][angleToOtherIsland]=correlation
+
+        dataSum={}
+        dataCount={}
+
+        possibleCenterAngles=[30,90,150,210,270,330]
+        possibleOffsetAngles=[0,60,120,180,240,300]
+
+        for i in possibleCenterAngles:
+            dataSum[i]={}
+            dataCount[i]={}
+            for j in possibleOffsetAngles:
+                dataSum[i][j]=0
+                dataCount[i][j]=0
+        
+
+        for moment in self.moments:
+            if moment.angle is None:
+                continue
+
+            nearestNeighbors=self.getGroupedMomentsByDistance(moment.x,moment.y)[1]
+
+            assert nearestNeighbors[0]-1<0.0000001# only do the islands a distance of 1 away
+
+            centerAngle=round(restrictAngleRad(moment.angle)/math.pi*180)
+            assert centerAngle in possibleCenterAngles
+
+            for neighbor in nearestNeighbors[1]:
+                directionVector=(neighbor.x-moment.x,neighbor.y-moment.y)
+                offsetAngle=round(restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))*180/math.pi,4)
+                assert offsetAngle in possibleOffsetAngles
+
+                if moment.angle is not None and neighbor.angle is not None:
+                    dataSum[centerAngle][offsetAngle]+=math.cos(moment.angle-neighbor.angle)
+                    dataCount[centerAngle][offsetAngle]+=1
+
+        dataAvg={}
+        for key in dataSum.keys():
+            dataAvg[key]={}
+            for key2 in dataSum[key].keys():
+
+
+                if dataCount[key][key2]==0:
+                    dataAvg[key][key2]=0
+                    #prevent divide by 0
+                else:
+                    dataAvg[key][key2]=dataSum[key][key2]/dataCount[key][key2]
+
+        return dataAvg
+
+
                 
     def getCorrelationVsDistance(self,maxNAway):
         correlationCount=[0]*maxNAway
         correlationSum=[0]*maxNAway
 
         for moment in self.moments:
+            if moment.angle is None:
+                continue
+
             groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
             for n in range(maxNAway):
                 otherMoments=groups[n][1]
                 for otherMoment in otherMoments:
+
+                    if otherMoment.angle is None:
+                        continue
                     
-                    dotProduct=angleDotProduct(otherMoment.angle,moment.angle)
+                    dotProduct=angleDotProductRad(otherMoment.angle,moment.angle)
 
                     correlationSum[n]+=dotProduct
                     correlationCount[n]+=1
         
-        correlation=[correlationSum[i]/correlationCount[i] for i in range(n)]
+        correlation=[correlationSum[i]/correlationCount[i] for i in range(maxNAway)]
         return correlation
 
     def getCorrelationVsAbsoluteAngle(self,maxNAway):
@@ -252,14 +335,20 @@ class MomentGrid:
         for i in range(maxNAway):correlationCounts.append({})
 
         for moment in self.moments:
+            if moment.angle is None:
+                continue
+
             groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
             for n in range(maxNAway):
                 otherMoments=groups[n][1]
                 for otherMoment in otherMoments:
-                    directionVector=(otherMoment.y-moment.y,otherMoment.x-moment.x)
-                    relativeAngle=round(restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))*180/math.pi,2)
+                    if otherMoment.angle is None:
+                        continue
+
+                    directionVector=(otherMoment.x-moment.x,otherMoment.y-moment.y)
+                    relativeAngle=round(restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))*180/math.pi,4)
                     
-                    dotProduct=angleDotProduct(otherMoment.angle,moment.angle)
+                    dotProduct=angleDotProductRad(otherMoment.angle,moment.angle)
 
                     if relativeAngle in correlationCounts[n].keys():
                         correlationCounts[n][relativeAngle]+=1
@@ -587,11 +676,12 @@ class YShapeLattice:
                             cv2.line(img,node,nearCenter,BLACK,1)
 
                 if showIslands and simplifyIslands:
-                    vector=np.array(getIslandMomentVector(island))
-                   
-                    start=tuple((center-vector*armLength/2).astype(int))
-                    end=tuple((center+vector*armLength/2).astype(int))
-                    cv2.arrowedLine(img,start,end,BLACK,armWidth,tipLength=spacingX/100)
+                    moment=getIslandMomentVector(island)
+                    if moment is not None:
+                        vector=np.array(moment)
+                        start=tuple((center-vector*armLength/2).astype(int))
+                        end=tuple((center+vector*armLength/2).astype(int))
+                        cv2.arrowedLine(img,start,end,BLACK,armWidth,tipLength=spacingX/100)
                 
                 if showIslandCharge:
                     charge=self.getIslandCharge(row,col)
@@ -653,21 +743,21 @@ class YShapeLattice:
                         if(color is not None):
                             cv2.circle(img,(int(ringxy[0]),int(ringxy[1])), int(spacingX/4), color, 2)
                 
-                if showVector:
+                if showVector and getIslandMomentVector(island) is not None:
                     vector=getIslandMomentVector(island)
+
                     start=np.array(xy)
                     end=start+vector*spacingX/3
                     start=start.astype(int)
                     end=end.astype(int)
                     #cv2.arrowedLine(img,start,end,RED,tipLength=0.2,thickness=2)
                     #cv2.putText(img,str(getIslandAngle(island))[0:3],coord,cv2.FONT_HERSHEY_COMPLEX,0.3,RED)
+        
                     angle=getIslandAngle(island)
-                    color=num_to_rgb(angle,max_val=360)
-                    color=(color[0],color[1],color[2],0.1)
-
-
-                    
-                    cv2.circle(overlay,start,int(spacingX/2),color,-1)
+                    if angle is not None:
+                        color=num_to_rgb(angle,max_val=360)
+                        color=(color[0],color[1],color[2],0.1)
+                        cv2.circle(overlay,start,int(spacingX/2),color,-1)
 
         alpha=0.5
         mask=overlay.astype(bool)
@@ -719,6 +809,7 @@ class YShapeLattice:
                 realY=y*vSpacing
 
                 if not isBadIsland(island):
+
                     angle=getIslandAngleRad(island)
                     moments.addMoment(Moment(realX,realY,angle,1))
 
@@ -772,11 +863,17 @@ def renderFile(lattice,outFolder):
     #cv2.waitKey(0)
 
 
+outFolder="yShapeOut"
 
 def getUserInputFiles():
+    global outFolder
+
     parser = argparse.ArgumentParser(description='Y shaped lattice csv reader')
     parser.add_argument("file", type=str, help="Path to csv file or folder")
+    parser.add_argument("--out", type=str, default="yShapeOut")
     args=parser.parse_args()
+
+    outFolder=args.out
 
     fileNames=[]
     if os.path.isfile(args.file):
@@ -813,11 +910,12 @@ def writeCorrelationsToFile(chargeCorrelations,f):
 
 if __name__=="__main__":
     if True:
-        GEN_CHARGE_CORRELATION=False
-        RENDER_FILES=False
-        RUN_RELATIVE_ANGLE=False
-        RUN_CORRELATION_VS_DISTANCE=False
+        GEN_CHARGE_CORRELATION=True
+        RENDER_FILES=True
+        RUN_CORRELATION_VS_DISTANCE=True
+        RUN_CORRELATION_VS_OFFSET=True
         RUN_CORRELATION_VS_ANGLE=True
+
 
         fileNames=sorted(getUserInputFiles())
 
@@ -827,7 +925,7 @@ if __name__=="__main__":
         BBChargeCorrelations={}
         ABChargeCorrelations={}
 
-        relativeAngleVsDistance={}
+        correlationVsOffset={}
         correlationVsDistance={}
         correlationVsAngle={}
 
@@ -845,17 +943,17 @@ if __name__=="__main__":
 
             moments=lattice.getMomentGrid()
 
-            if RUN_RELATIVE_ANGLE:
-                relativeAngleVsDistance[fileName]=moments.getRelativeAngleVsDistance(2)
+            if RUN_CORRELATION_VS_OFFSET:
+                correlationVsOffset[fileName]=moments.getCorrelationByOffsetAngle()
 
             if RUN_CORRELATION_VS_DISTANCE:
-                correlationVsDistance[fileName]=moments.getCorrelationVsDistance(10)
+                correlationVsDistance[fileName]=moments.getCorrelationVsDistance(7)
 
             if RUN_CORRELATION_VS_ANGLE:
-                correlationVsAngle[fileName]=moments.getCorrelationVsAbsoluteAngle(5)
+                correlationVsAngle[fileName]=moments.getCorrelationVsAbsoluteAngle(7)
 
             if RENDER_FILES:
-                renderFile(lattice,"yShapeOut")
+                renderFile(lattice,outFolder)
 
                 cg=lattice.getChargeGrid()
 
@@ -879,7 +977,7 @@ if __name__=="__main__":
 
 
 
-            with open("yShapeOut/chargeCorrelation.csv", "w") as f:
+            with open(outFolder+"/chargeCorrelation.csv", "w") as f:
                 
                 f.write("Overall Correlation\n")
                 writeCorrelationsToFile(chargeCorrelations,f)
@@ -893,25 +991,22 @@ if __name__=="__main__":
                 f.close()
     
 
-        if RUN_RELATIVE_ANGLE:
-            print(relativeAngleVsDistance)
-            with open("yShapeOut/relativeAngleVsDist.csv", "w") as f:
-                f.write("file name, n, 0,60,120,180,240,300\n")
+        if RUN_CORRELATION_VS_OFFSET:
+            possibleCenterAngles=[30,90,150,210,270,330]
+            possibleOffsetAngles=[0,60,120,180,240,300]
 
-                for fileName,values in relativeAngleVsDistance.items():
-                    for n in range(1,len(values)):
-                        f.write(fileName+", "+str(n)+", ")
-                        
-                        for val in [0,60,120,180,240,300]:
-                            if val in values[n]:
-                                f.write(str(values[n][val])+", ")
-                            else:
-                                f.write("0, ")
+            with open(outFolder+"/correlationVsOffset.csv", "w") as f:
+                f.write(f"file name, center moment angle, {str(possibleOffsetAngles)[1:-1]}\n")
 
+                for fileName,value in correlationVsOffset.items():
+                    for centerMomentAngle in possibleCenterAngles:
+                        f.write(f"{fileName}, {centerMomentAngle}, ")
+                        for offsetAngle in possibleOffsetAngles:
+                            f.write(str(value[centerMomentAngle][offsetAngle])+", ")
                         f.write("\n")
 
         if RUN_CORRELATION_VS_ANGLE:
-            with open("yShapeOut/correlationVsRelativeAngle.csv", "w") as f:
+            with open(outFolder+"/correlationVsAngle.csv", "w") as f:
                 f.write("file name, distance, angle1, correlation1, angle2, correlation2, angle3, correlation3, ...\n")
                 for fileName,values in sorted(correlationVsAngle.items()):
                     for n in range(1,len(values)):
@@ -923,12 +1018,12 @@ if __name__=="__main__":
                         f.write("\n")
         
         if RUN_CORRELATION_VS_DISTANCE:
-            with open("yShapeOut/correlationVsDist.csv","w") as f:
-                f.write(f"file, n=0, n=1, n=2, ...\n")
+            with open(outFolder+"/correlationVsDist.csv","w") as f:
+                f.write(f"file, n=1, n=2, n=3, ...\n")
 
                 for fileName,values in correlationVsDistance.items():
                     f.write(f"{fileName}, ")
-                    for value in values:
+                    for value in values[1:]:
                         f.write(f"{value}, ")
                     f.write("\n")
 
