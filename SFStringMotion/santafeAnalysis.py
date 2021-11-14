@@ -442,6 +442,7 @@ class SantaFeLattice:
 
         if(self.shouldRemoveEdgeStrings):
             self.removeEdgeStrings();    
+        self.updateCompositeSquareCenters()
 
     #takes a csvreader and updates the rawData array
     def updateRawData(self,csvreader):
@@ -670,7 +671,7 @@ class SantaFeLattice:
             #if(string.isLoop()):
             #    text+=" loop"
             #text+=" "+str(self.getTouchingCompositeSquares(string))
-            cv2.putText(image, text, self.getXYFromRowCol(*string.getCoM(),image), cv2.FONT_HERSHEY_SIMPLEX,0.4, BLACK, 1, cv2.LINE_AA)
+            cv2.putText(image, text, self.getXYFromRowCol(*string.getCoM(),image), cv2.FONT_HERSHEY_SIMPLEX,0.6, BLACK, 2, cv2.LINE_AA)
             
 
     #draw the line segment representation of each string

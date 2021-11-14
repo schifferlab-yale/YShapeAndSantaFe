@@ -112,9 +112,11 @@ def genLattice(data,vertexEnergy):
 
 
 
-def generateSharedPointGraph(oldLattice,newLattice,oldStrings,newStrings,minSharedPoints=2,minSharedPointsFraction=0.25,nonInteriorCenterMinSharedPoints=0):
+def generateSharedPointGraph(oldLattice,newLattice,oldStrings,newStrings,minSharedPoints=1,minSharedPointsFraction=0,nonInteriorCenterMinSharedPoints=1):
     oldData=[(string,[]) for string in oldStrings]
     newData=[(string, []) for string in newStrings]
+
+
     for oldI, oldDataPoint in enumerate(oldData):
         oldString=oldDataPoint[0]
         oldConnections=oldDataPoint[1]
@@ -126,12 +128,16 @@ def generateSharedPointGraph(oldLattice,newLattice,oldStrings,newStrings,minShar
             newString=newDataPoint[0]
             newConnections=newDataPoint[1]
 
+            
+
             newPoints=newString.getPoints()
             nonInteriorCenterNewPoints=[point for point in newPoints if newLattice.data[point[0]][point[1]].interiorCenter==False]#remove interior centers
             newPoints=set(newPoints)
             
             sharedPoints=len(oldPoints.intersection(newPoints))
             sharedNonInteriorCenterPoints=len(set(nonInteriorCenterNewPoints).intersection(set(nonInteriorCenterOldPoints)))
+
+
             if sharedPoints>=minSharedPoints and sharedNonInteriorCenterPoints >= nonInteriorCenterMinSharedPoints and (sharedPoints>=len(oldPoints)*minSharedPointsFraction or sharedPoints>=len(newPoints)*minSharedPointsFraction):
                 oldConnections.append(newDataPoint)
                 newConnections.append(oldDataPoint)
@@ -186,8 +192,6 @@ def groupByTouchingInteriors(oldLattice,newLattice,oldStrings,newStrings):
 
     for string in oldStrings:
         touching=frozenset(oldLattice.getTouchingCenters(string))
-        if(len(touching)==0):
-            continue
         thisHash=hash(touching)
         if thisHash in groups:
             groups[thisHash][0].append(string)
@@ -196,8 +200,6 @@ def groupByTouchingInteriors(oldLattice,newLattice,oldStrings,newStrings):
     
     for string in newStrings:
         touching=frozenset(newLattice.getTouchingCenters(string))
-        if(len(touching)==0):
-            continue
         thisHash=hash(touching)
         if thisHash in groups:
             groups[thisHash][1].append(string)
@@ -213,37 +215,37 @@ def getNoChange(oldLattice,newLattice,oldStrings,newStrings):
     noChanges=[]
     pointSets={}
 
-    for string in oldStrings:
-        pointSets[hash(frozenset(string.getPoints()))]=string
-    
-    for string in newStrings:
-        key=hash(frozenset(string.getPoints()))
-        if key in pointSets:
+    for oldString in [_ for _ in oldStrings]:
+        pointSets[hash(frozenset(oldString.getPoints()))]=oldString
+
+    for newString in [_ for _ in newStrings]:
+        key=hash(frozenset(newString.getPoints()))
+        if key in pointSets.keys():
             oldString=pointSets[key]
 
-            noChanges.append((oldString,string))
+            noChanges.append((oldString,newString))
             oldStrings.remove(oldString)
-            newStrings.remove(string)
+            newStrings.remove(newString)
 
 
     return noChanges
+
        
 
 def getSimpleMotions(oldLattice,newLattice,oldStrings,newStrings):
     groups=groupByTouchingInteriors(oldLattice,newLattice,oldStrings,newStrings)
     motions={
-        "noChange":[],
         "grow":[],
         "shrink":[],
         "wiggleEnergyIncrease":[],
         "wiggleEnergyDecrease":[],
         "wiggleEnergySame":[],
         "ambiguousTrivial":[],
-        "ambiguousNonTrivial":[]
+        "ambiguousNonTrivial":[],
+        "discarded":[]
     }
 
     for group in groups:
-
 
 
         #check if there are 0 or 1 elements only
@@ -255,9 +257,11 @@ def getSimpleMotions(oldLattice,newLattice,oldStrings,newStrings):
         if hasLessThanTwoInteriors:
             for string in group[0]:
                 if not string.isLoop():
+                    motions["discarded"].append((string,None))
                     oldStrings.remove(string)
             for string in group[1]:
                 if not string.isLoop():
+                    motions["discarded"].append((None,string))
                     newStrings.remove(string)
             
 
@@ -303,6 +307,12 @@ def getSimpleMotions(oldLattice,newLattice,oldStrings,newStrings):
 
     return motions
 
+def isLoop(string,lattice):
+    return string.isLoop() and len(lattice.getTouchingCenters(string))<2
+
+def isZ2(string,lattice):
+    return len(string.getPoints())==3 and len(lattice.getTouchingCenters(string))==2
+
 def getComplexMotions(oldLattice,newLattice,oldStrings,newStrings):
     oldData,newData=generateSharedPointGraph(oldLattice,newLattice,oldStrings,newStrings)
     graphs=sepererateGraph(oldData,newData)
@@ -310,24 +320,61 @@ def getComplexMotions(oldLattice,newLattice,oldStrings,newStrings):
     motions={
         "loopWiggle":[],
         "adjacentReconnection":[],
-        "nonTrivialWiggle":[]
+        "nonTrivialWiggle":[],
+        "merge":[],
+        "split":[],
+        "loopCreation":[],
+        "loopAnnihilation":[],
+        "z2Creation":[],
+        "z2Annihilation":[],
+        "creation":[],
+        "annihilation":[],
+        "complex":[],
+        "reconnection":[]
     }
 
     for graph in graphs:
         old=graph[0]
         new=graph[1]
 
-        if len(old)==1 and len(new)==1:#grow wiggle shrink
-            oldString=old[0][0]
-            newString=new[0][0]
-            if oldString.isLoop() and newString.isLoop():
+        graphOldStrings=[i[0] for i in old]
+        graphNewStrings=[i[0] for i in new]
+
+        if len(graphOldStrings)==1 and len(graphNewStrings)==1:#grow wiggle shrink
+            oldString=graphOldStrings[0]
+            newString=graphNewStrings[0]
+
+            if isLoop(oldString, oldLattice) and isLoop(newString,newLattice):
                 motions["loopWiggle"].append((oldString,newString))
-            
-            elif set(oldLattice.getTouchingCompositeSquares(oldString))==set(newLattice.getTouchingCompositeSquares(newString)):
+            elif set(oldLattice.getTouchingCompositeSquares(oldString))==set(newLattice.getTouchingCompositeSquares(newString)) and len(set(newLattice.getTouchingCompositeSquares(newString)))>0:
+
                 motions["adjacentReconnection"].append((oldString,newString))
             else:
                 motions["nonTrivialWiggle"].append((oldString,newString))
-
+        elif len(old)==1 and len(new)>1:
+            motions["split"].append((graphOldStrings[0],graphNewStrings))
+        elif len(old)>1 and len(new)==1:
+            motions["merge"].append((graphOldStrings,graphNewStrings[0]))
+        elif len(new)==2 and len(old)==2 and len(new[0][1])==2 and len(new[1][1])==2 and len(old[0][1])==2 and len(old[1][1])==2:
+            motions["reconnection"].append((graphOldStrings,graphNewStrings))
+        elif len(old)==0 and len(new)==1:
+            newString=graphNewStrings[0]
+            if isLoop(newString,newLattice):
+                motions["loopCreation"].append((None,newString))
+            elif isZ2(newString,newLattice):
+                motions["z2Creation"].append((None,newString))
+            else:
+                motions["creation"].append((None,newString))
+        elif len(old)==1 and len(new)==0:
+            oldString=graphOldStrings[0]
+            if isLoop(oldString,oldLattice):
+                motions["loopAnnihilation"].append((oldString,None))
+            elif isZ2(oldString,oldLattice):
+                motions["z2Annihilation"].append((oldString,None))
+            else:
+                motions["annihilation"].append((oldString,None))
+        else:
+            motions["complex"].append((graphOldStrings,graphNewStrings))
 
     return motions
 
@@ -438,8 +485,11 @@ def stringifyChanges(changes):
 
     string=""
     for type,occurences in changes.items():
-        if type=="noChange":
+        if type=="noChange" :
             string+=f"{len(occurences)} strings: no Change\n"
+            continue
+        if type=="discarded":
+            string+=f"{len(occurences)} strings: discarded\n"
             continue
         for occurence in occurences:
             string+=f"{occurence[0]}->{occurence[1]} {type}\n"
@@ -498,11 +548,11 @@ def getMotions(oldLattice,newLattice):
     oldStrings=[string for string in oldLattice.strings]
     newStrings=[string for string in newLattice.strings]
 
-    noChanges=getNoChange(oldLattice,newLattice,oldStrings,newStrings)
+    noChange={"noChange":getNoChange(oldLattice,newLattice,oldStrings,newStrings)}
     simpleMotions=getSimpleMotions(oldLattice,newLattice,oldStrings,newStrings)
     complexMotions=getComplexMotions(oldLattice,newLattice,oldStrings,newStrings)
 
-    motions={**{"noChange":noChanges},**simpleMotions,**complexMotions}
+    motions={**noChange,**simpleMotions,**complexMotions}
 
     """motions=getBaseMotionData(oldLattice,newLattice,oldStrings,newStrings)
     motions=splitTrivialNonTrivail(motions,oldLattice,newLattice,keys=["wiggle","grow","shrink"])
@@ -658,6 +708,7 @@ class SFMotionSample:
         lattices=self.lattices
         motions=[None]
         for index, lattice in enumerate(self.lattices[:-1]):
+            #print(f"frame {index}->{index+1}")
 
             thisLattice=lattice
             nextLattice=lattices[index+1]
@@ -704,9 +755,11 @@ if __name__=="__main__":
 
     fileType=determineFileType(args.file)
     data=getSFMotionFileData(args.file)
-    motion=SFMotionSample(data,fileType,fileName=args.file,skippedIndex=10,maxIndex=35)
+    motion=SFMotionSample(data,fileType,fileName=args.file,skippedIndex=10,maxIndex=None)
 
     images=motion.savedImages
+    for i,image in enumerate(images):
+        cv2.imwrite(f"out/{i}.png",np.float32(image))
 
     i=0;
     while True:
