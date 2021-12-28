@@ -234,11 +234,12 @@ class LineSegment():
 
 #a string is essentially a collection of line segments
 class String():
-    def __init__(self, lineSegments):
+    def __init__(self, lineSegments,lattice):
         self.lineSegments=lineSegments
         self.color= list(np.random.random(size=3) * 256)
         self.id=np.random.randint(0,2**31-1)
         self.touchingInteriors=[]
+        self.lattice=lattice
 
     #adds another line segment to this string
     def addLineSegment(self,lineSegment):
@@ -258,6 +259,9 @@ class String():
                 if not(point in points):
                     points.append(point)
         return points
+
+    def getVertexPoints(self,lattice):#NOT the placquette centers
+        return [point for point in self.getPoints() if not lattice.isCenter(*point)]
     
     def getInteriorCenterPoints(self,lattice):
         return [point for point in self.getPoints() if lattice.isCenter(*point) and lattice.isInteriorCenter(*point)]
@@ -657,6 +661,11 @@ class SantaFeLattice:
         for line in string.lineSegments:
             start=self.getXYFromRowCol(*line.start,image)
             end=self.getXYFromRowCol(*line.end,image)
+
+            if line.start in string.getVertexPoints(string.lattice):
+                image=cv2.circle(image,start,5,RED)
+
+
             image=cv2.line(image,start,end,string.color,lineWidth)
 
         """if(len(string.getPoints())>50):
@@ -974,6 +983,14 @@ class SantaFeLattice:
         
         islandCount, type = self.getVertexCountType(rowI,colI)
         return type>1#all non-type-1 verticies are dimers
+    
+    def numDimers(self):
+        count=0
+        for row in self.data:
+            for cell in row:
+                if cell.dimer:
+                    count+=1
+        return count
 
     def getVertexCountType(self,rowI,colI):
         vertexType=0;
@@ -1221,11 +1238,11 @@ class SantaFeLattice:
                         stringIndices.append(stringI)
 
             if(len(stringIndices)==0):#if it is not touching any strings, make a new string group
-                self.strings.append(String([line]))
+                self.strings.append(String([line],self))
             elif(len(stringIndices)==1):#if it is touching one string, add it to that one
                 self.strings[stringIndices[0]].addLineSegment(line)
             else: #touching multiple strings which need to be combined
-                newString=String([])#combination of toching line groups
+                newString=String([],self)#combination of toching line groups
                 for stringI in stringIndices:
                     newString.addString(self.strings[stringI])#add group to new group
                     self.strings[stringI]=None#set it to None instead of delete so theres no indexing issues
