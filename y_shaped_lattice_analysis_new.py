@@ -71,7 +71,7 @@ class Moment:
         self.magnitude=magnitude
 
     def __repr__(self):
-        return f"{self.x},{self.y}"
+        return f"{restrictAngleRad(self.angle)*180/math.pi}"
 
 def angleDotProductRad(angle1,angle2):
     return math.cos(angle1-angle2)
@@ -94,6 +94,8 @@ def getIslandMomentVector(island):
 
 #gets angle of island moment vector (in degrees)
 def getIslandAngle(island):
+    if island is None:
+        return None
     vector=getIslandMomentVector(island)
     if vector[0]==0 and vector[1]==0:
         return None
@@ -107,6 +109,14 @@ def restrictAngleRad(angle):
         angle+=2*math.pi;
     while angle>=2*math.pi:
         angle-=2*math.pi
+    return angle
+
+#restricts a number to be in between [0,360)
+def restrictAngleDeg(angle):
+    while angle<0:
+        angle+=360;
+    while angle>=360:
+        angle-=360
     return angle
 
 #converts an island to an angle
@@ -205,14 +215,14 @@ class MomentGrid:
     def getNthClosestMoments(self,x,y,n):
         return self.getGroupedMomentsByDistance(x,y)[n][1]
 
-    """def getRelativeAngleVsDistance(self,maxNAway):
+    def getRelativeAngleVsDistance(self,maxNAway):
 
 
         angleDiffSum=[0]*maxNAway
         angleDiffCount=[0]*maxNAway
 
         angleCounts=[]
-        for i in range(maxNAway):angleCounts.append({})
+        for i in range(maxNAway):angleCounts.append({0:0,60:0,120:0,180:0,240:0,300:0})
 
         for moment in self.moments:
             groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
@@ -225,7 +235,6 @@ class MomentGrid:
                     if otherMoment.angle is None:
                         continue
                     angle=round(180/math.pi*restrictAngleRad(otherMoment.angle-moment.angle))
-                    print(angle)
 
                     angleDiffSum[n]+=angle
                     angleDiffCount[n]+=1
@@ -233,7 +242,7 @@ class MomentGrid:
                     if angle in angleCounts[n].keys():
                         angleCounts[n][angle]+=1
                     else:
-                        angleCounts[n][angle]=1
+                        raise "Bad angle"
             
         anglePercent=[]
         for counts in angleCounts:
@@ -245,19 +254,21 @@ class MomentGrid:
                 dict[key]=counts[key]/total
             anglePercent.append(dict)
 
-        return anglePercent"""
+        return anglePercent
 
 
     def getCorrelationByOffsetAngle(self):
 
         #format: data[centerMomentAngle][angleToOtherIsland]=correlation
 
-        dataSum={}
-        dataCount={}
+        dataSum={}#sum of the corrolations for a given center moment angle and and offset angle
+        dataCount={}#counts the total number of data points (for averaging)
 
-        possibleCenterAngles=[30,90,150,210,270,330]
-        possibleOffsetAngles=[0,60,120,180,240,300]
+        possibleCenterAngles=[30,90,150,210,270,330]#possible angles an island can be at
+        possibleOffsetAngles=[0,60,120,180,240,300]#possible differences between island angles
 
+
+        #populate empty dicts for all center and offset compbinations
         for i in possibleCenterAngles:
             dataSum[i]={}
             dataCount[i]={}
@@ -265,26 +276,28 @@ class MomentGrid:
                 dataSum[i][j]=0
                 dataCount[i][j]=0
         
-
-        for moment in self.moments:
-            if moment.angle is None:
+        for moment in self.moments:#loop through all islands in sample
+            if moment.angle is None:#skip bad islands
                 continue
 
-            nearestNeighbors=self.getGroupedMomentsByDistance(moment.x,moment.y)[1]
+            nearestNeighbors=self.getGroupedMomentsByDistance(moment.x,moment.y)[1]#returns an array islands at a distance of 1 away from center island
+            #we take the first element because we are taking the group of closest islands
 
-            assert nearestNeighbors[0]-1<0.0000001# only do the islands a distance of 1 away
+            assert nearestNeighbors[0]-1<0.0000001#confirm that the islands are 1 unit away
 
-            centerAngle=round(restrictAngleRad(moment.angle)/math.pi*180)
+            centerAngle=round(restrictAngleRad(moment.angle)/math.pi*180)#make sure angle is between [0,2pi) and convert to degrees
+
             assert centerAngle in possibleCenterAngles
 
-            for neighbor in nearestNeighbors[1]:
-                directionVector=(neighbor.x-moment.x,neighbor.y-moment.y)
-                offsetAngle=round(restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))*180/math.pi,4)
+            for neighbor in nearestNeighbors[1]:#take element 1 from nearest neighbors (this is the array of neighbors)
+                directionVector=(neighbor.x-moment.x,neighbor.y-moment.y)#vector pointing from the center island to the neighbor
+                offsetAngle=round(restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))*180/math.pi,4)#angle between the moment of the two islands
                 assert offsetAngle in possibleOffsetAngles
 
                 if moment.angle is not None and neighbor.angle is not None:
                     dataSum[centerAngle][offsetAngle]+=math.cos(moment.angle-neighbor.angle)
                     dataCount[centerAngle][offsetAngle]+=1
+        
 
         dataAvg={}
         for key in dataSum.keys():
@@ -297,7 +310,6 @@ class MomentGrid:
                     #prevent divide by 0
                 else:
                     dataAvg[key][key2]=dataSum[key][key2]/dataCount[key][key2]
-
         return dataAvg
 
 
@@ -607,7 +619,7 @@ class YShapeLattice:
         island=self.data[row][col]
         return (island[TOPLEFT]+island[TOPRIGHT]+island[BOTTOM])
 
-    def draw(self,img,showIslands=True, showIslandCharge=False, showRings=False,showVertexCharge=False, halfInverted=False, simplifyIslands=False, armWidth=2,showVector=False):
+    def draw(self,img,showIslands=True, showIslandCharge=False, twoColor=False, showRings=False,showVertexCharge=False, halfInverted=False, simplifyIslands=False, armWidth=2,showVector=False):
         data=self.data
 
         imageHeight,imageWidth,channels=img.shape
@@ -753,11 +765,17 @@ class YShapeLattice:
                     #cv2.arrowedLine(img,start,end,RED,tipLength=0.2,thickness=2)
                     #cv2.putText(img,str(getIslandAngle(island))[0:3],coord,cv2.FONT_HERSHEY_COMPLEX,0.3,RED)
         
-                    angle=getIslandAngle(island)
+                    angle=restrictAngleDeg(getIslandAngle(island))
                     if angle is not None:
-                        color=num_to_rgb(angle,max_val=360)
-                        color=(color[0],color[1],color[2],0.1)
-                        cv2.circle(overlay,start,int(spacingX/2),color,-1)
+                        if twoColor:
+                            if angle in [30,150,270]:
+                                color=RED
+                            else:
+                                color=BLUE
+                        else:
+                            color=num_to_rgb(angle,max_val=360)
+                            color=(color[0],color[1],color[2],0.1)
+                        cv2.circle(overlay,tuple(start),int(spacingX/2),color,-1)
 
         alpha=0.5
         mask=overlay.astype(bool)
@@ -843,9 +861,11 @@ def renderFile(lattice,outFolder):
     chargeImg=blankImg.copy()
     chargeImgHalfInverted=blankImg.copy()
     domainImg=blankImg.copy()
+    twoColorDomainImg=blankImg.copy()
     ringImg=blankImg.copy()
 
     drawDomains(lattice,domainImg)
+    lattice.draw(twoColorDomainImg,showVector=True,simplifyIslands=True,twoColor=True)
     lattice.draw(chargeImg,showIslandCharge=True,showVertexCharge=True)
     lattice.draw(chargeImgHalfInverted,showIslandCharge=True,showVertexCharge=True,halfInverted=True)
     lattice.draw(ringImg,showRings=True)
@@ -857,6 +877,7 @@ def renderFile(lattice,outFolder):
     cv2.imwrite(outFilePrefix+"_charge.jpg",chargeImg)
     cv2.imwrite(outFilePrefix+"_chargeImgHalfInverted.jpg",chargeImgHalfInverted)
     cv2.imwrite(outFilePrefix+"_rings.jpg",ringImg)
+    cv2.imwrite(outFilePrefix+"_twoColorDomains.jpg",twoColorDomainImg)
     
 
     #cv2.imshow("window",domainImg)
@@ -910,11 +931,12 @@ def writeCorrelationsToFile(chargeCorrelations,f):
 
 if __name__=="__main__":
     if True:
-        GEN_CHARGE_CORRELATION=True
+        GEN_CHARGE_CORRELATION=False
         RENDER_FILES=True
-        RUN_CORRELATION_VS_DISTANCE=True
-        RUN_CORRELATION_VS_OFFSET=True
-        RUN_CORRELATION_VS_ANGLE=True
+        RUN_CORRELATION_VS_DISTANCE=False
+        RUN_CORRELATION_VS_OFFSET=False
+        RUN_CORRELATION_VS_ANGLE=False
+        RUN_RELATIVE_ANGLE_VS_DISTANCE=False
 
 
         fileNames=sorted(getUserInputFiles())
@@ -928,6 +950,7 @@ if __name__=="__main__":
         correlationVsOffset={}
         correlationVsDistance={}
         correlationVsAngle={}
+        relativeAngleVsDistance={}
 
         for fileName in fileNames:
             print(f"analyzing: {fileName}")
@@ -951,6 +974,9 @@ if __name__=="__main__":
 
             if RUN_CORRELATION_VS_ANGLE:
                 correlationVsAngle[fileName]=moments.getCorrelationVsAbsoluteAngle(7)
+
+            if RUN_RELATIVE_ANGLE_VS_DISTANCE:
+                relativeAngleVsDistance[fileName]=moments.getRelativeAngleVsDistance(7)
 
             if RENDER_FILES:
                 renderFile(lattice,outFolder)
@@ -1027,6 +1053,17 @@ if __name__=="__main__":
                         f.write(f"{value}, ")
                     f.write("\n")
 
+        if RUN_RELATIVE_ANGLE_VS_DISTANCE:
+            angles=[0,60,120,180,240,300]
+            with open(outFolder+"/relativeAngleVsDist.csv","w") as f:
+                f.write(f"file name, n, 0,60,120,180,240,300\n")
+                for fileName, value in relativeAngleVsDistance.items():
+                    print(relativeAngleVsDistance[fileName])
+                    for n in range(len(relativeAngleVsDistance[fileName])):
+                        f.write(f"{fileName}, {n}, ")
+                        for angle in angles:
+                            f.write(f"{relativeAngleVsDistance[fileName][n][angle]}, ")
+                        f.write("\n")
             
                     
 
