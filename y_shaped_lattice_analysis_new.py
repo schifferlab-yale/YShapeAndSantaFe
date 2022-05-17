@@ -59,12 +59,13 @@ class Charge:
         self.charge=charge
         self.type=type
     def __repr__(self):
-        return f"{self.charge}"
+        #return f"{self.charge}"
         return f"{self.charge} at {self.x},{self.y}"
 
 #basic moment class for MomentGrid
 class Moment:
     def __init__(self,x,y,angle,magnitude):
+        if angle is None: raise Exception("Angle is None")
         self.x=x
         self.y=y
         self.angle=angle
@@ -72,6 +73,7 @@ class Moment:
 
     def __repr__(self):
         return f"{restrictAngleRad(self.angle)*180/math.pi}"
+        return f"{restrictAngleRad(self.angle)*180/math.pi} {self.x} {self.y}"
 
 def angleDotProductRad(angle1,angle2):
     return math.cos(angle1-angle2)
@@ -113,6 +115,8 @@ def restrictAngleRad(angle):
 
 #restricts a number to be in between [0,360)
 def restrictAngleDeg(angle):
+    if angle is None: return None
+
     while angle<0:
         angle+=360;
     while angle>=360:
@@ -182,8 +186,8 @@ class MomentGrid:
 
             #cv2.putText(img,str(len(nearest)),(int(imgX+2),int(imgY-2)),cv2.FONT_HERSHEY_COMPLEX, 0.3, BLACK)
 
-            start=(int(imgX+math.cos(moment.angle)*arrowLength),int(imgY+math.sin(moment.angle)*arrowLength))
-            end=(int(imgX-math.cos(moment.angle)*arrowLength),int(imgY-math.sin(moment.angle)*arrowLength))
+            end=(int(imgX+math.cos(moment.angle)*arrowLength),int(imgY+math.sin(moment.angle)*arrowLength))
+            start=(int(imgX-math.cos(moment.angle)*arrowLength),int(imgY-math.sin(moment.angle)*arrowLength))
             cv2.arrowedLine(img,start,end,BLACK,2,tipLength=0.2)
     
     #get all the moments sorted by their distance from (x,y)
@@ -323,6 +327,7 @@ class MomentGrid:
                 continue
 
             groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
+
             for n in range(maxNAway):
                 otherMoments=groups[n][1]
                 for otherMoment in otherMoments:
@@ -826,14 +831,59 @@ class YShapeLattice:
                 realX=x+xOffset
                 realY=y*vSpacing
 
-                if not isBadIsland(island):
+                if not isBadIsland(island) and getIslandAngleRad(island) is not None:
 
                     angle=getIslandAngleRad(island)
+
                     moments.addMoment(Moment(realX,realY,angle,1))
+
+        
 
         return moments
 
+    def getLegMomentGrid(self):
+        vSpacing=math.sqrt(3)/2
+        hSpacing=1
+        sideLength=math.sqrt(1/3)
+        moments=MomentGrid()
 
+
+        for (y,row) in enumerate(self.data):
+            thisRowOffset=self.isRowOffset(y)
+            if thisRowOffset:
+                xOffset=0.5
+            else:
+                xOffset=0
+
+            for (x,island) in enumerate(row):
+                if isBadIsland(island):
+                    continue
+
+                islandX=x+xOffset
+                islandY=y*vSpacing
+
+                leftAngle=1*math.pi/6
+                if island[0]==-1: leftAngle+=math.pi
+                leftX=islandX-sideLength/2*R3O2
+                leftY=islandY-sideLength/2*0.5
+
+                rightAngle=5*math.pi/6
+                if island[1]==-1: rightAngle+=math.pi
+                rightX=islandX+sideLength/2*R3O2
+                rightY=islandY-sideLength/2*0.5
+
+                bottomAngle=3*math.pi/2
+                if island[3]==-1: bottomAngle+=math.pi
+                bottomX=islandX
+                bottomY=islandY+sideLength/2
+
+
+                moments.addMoment(Moment(leftX,leftY,leftAngle,1))
+                moments.addMoment(Moment(rightX,rightY,rightAngle,1))
+                moments.addMoment(Moment(bottomX,bottomY,bottomAngle,1))
+
+        #print(moments.getGroupedMomentsByDistance(10, 9.814954576223638)[0:5])
+        return moments
         
 
 
@@ -863,12 +913,19 @@ def renderFile(lattice,outFolder):
     domainImg=blankImg.copy()
     twoColorDomainImg=blankImg.copy()
     ringImg=blankImg.copy()
+    dipoleImg=blankImg.copy()
 
     drawDomains(lattice,domainImg)
     lattice.draw(twoColorDomainImg,showVector=True,simplifyIslands=True,twoColor=True)
     lattice.draw(chargeImg,showIslandCharge=True,showVertexCharge=True)
     lattice.draw(chargeImgHalfInverted,showIslandCharge=True,showVertexCharge=True,halfInverted=True)
     lattice.draw(ringImg,showRings=True)
+
+
+    blankImg=np.zeros((2000,2000,3), np.uint8)
+    blankImg[:,:]=(150,150,150)
+    legMoments=lattice.getLegMomentGrid()
+    legMoments.draw(dipoleImg)
 
     os.makedirs(outFolder,exist_ok=True)
     outFilePrefix=os.path.join(outFolder,fileName.split("/")[-1].split(".")[0][0:])
@@ -878,6 +935,7 @@ def renderFile(lattice,outFolder):
     cv2.imwrite(outFilePrefix+"_chargeImgHalfInverted.jpg",chargeImgHalfInverted)
     cv2.imwrite(outFilePrefix+"_rings.jpg",ringImg)
     cv2.imwrite(outFilePrefix+"_twoColorDomains.jpg",twoColorDomainImg)
+    cv2.imwrite(outFilePrefix+"_dipoles.jpg",dipoleImg)
     
 
     #cv2.imshow("window",domainImg)
@@ -932,11 +990,12 @@ def writeCorrelationsToFile(chargeCorrelations,f):
 if __name__=="__main__":
     if True:
         GEN_CHARGE_CORRELATION=False
-        RENDER_FILES=True
+        RENDER_FILES=False
         RUN_CORRELATION_VS_DISTANCE=False
         RUN_CORRELATION_VS_OFFSET=False
         RUN_CORRELATION_VS_ANGLE=False
         RUN_RELATIVE_ANGLE_VS_DISTANCE=False
+        RUN_DIPOLE_CORRELATION=True
 
 
         fileNames=sorted(getUserInputFiles())
@@ -949,6 +1008,7 @@ if __name__=="__main__":
 
         correlationVsOffset={}
         correlationVsDistance={}
+        dipoleCorrelation={}
         correlationVsAngle={}
         relativeAngleVsDistance={}
 
@@ -965,6 +1025,16 @@ if __name__=="__main__":
 
 
             moments=lattice.getMomentGrid()
+
+            if RUN_DIPOLE_CORRELATION:
+                legMoments=lattice.getLegMomentGrid()
+
+
+                dipoleCorrelation[fileName]=legMoments.getCorrelationVsDistance(7)
+
+
+
+
 
             if RUN_CORRELATION_VS_OFFSET:
                 correlationVsOffset[fileName]=moments.getCorrelationByOffsetAngle()
@@ -1048,6 +1118,16 @@ if __name__=="__main__":
                 f.write(f"file, n=1, n=2, n=3, ...\n")
 
                 for fileName,values in correlationVsDistance.items():
+                    f.write(f"{fileName}, ")
+                    for value in values[1:]:
+                        f.write(f"{value}, ")
+                    f.write("\n")
+        
+        if RUN_DIPOLE_CORRELATION:
+            with open(outFolder+"/dipoleCorrelation.csv","w") as f:
+                f.write(f"file, n=1, n=2, n=3, ...\n")
+
+                for fileName,values in dipoleCorrelation.items():
                     f.write(f"{fileName}, ")
                     for value in values[1:]:
                         f.write(f"{value}, ")

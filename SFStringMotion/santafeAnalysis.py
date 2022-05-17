@@ -357,6 +357,8 @@ class String():
         #https://stackoverflow.com/questions/526331/cycles-in-an-undirected-graph
         return graphHasCycle(self.asGraph())
 
+    
+
     def b36id(self):
         return np.base_repr(self.id,36)[0:4]
 
@@ -640,6 +642,13 @@ class SantaFeLattice:
         for point in string.getPoints():
             energy+=self.getVertexEnergy(*point)
         return energy
+    
+    def getStringLength(self,string):
+        n=0
+        for point in string.getPoints():
+            if self.isDimer(*point):
+                n+=1
+        return n
 
 
 
@@ -681,6 +690,8 @@ class SantaFeLattice:
             #    text+=" loop"
             #text+=" "+str(self.getTouchingCompositeSquares(string))
             cv2.putText(image, text, self.getXYFromRowCol(*string.getCoM(),image), cv2.FONT_HERSHEY_SIMPLEX,0.6, BLACK, 2, cv2.LINE_AA)
+            
+            #cv2.putText(image, str(self.isTwoInteriorLoop(string)), self.getXYFromRowCol(*string.getCoM(),image), cv2.FONT_HERSHEY_SIMPLEX,0.6, BLACK, 2, cv2.LINE_AA)
             
 
     #draw the line segment representation of each string
@@ -1319,8 +1330,11 @@ class SantaFeLattice:
             count+=1;
         if(count==0):
             return 0
-        return correlation/count;
+        return correlation/count
 
+
+    def isTwoInteriorLoop(self,string):
+        return string.isLoop() and len(self.getTouchingCenters(string))<2
 
         """totalDotProduct=0
         nearestDotProduct=0

@@ -566,6 +566,36 @@ class SFMotionSample:
             if lattice is not None:
                 n+=lattice.numDimers()
         return n
+
+    def getLoopStringCount(self):
+        n=0
+        for lattice in self.lattices:
+            if lattice is not None:
+                n+=len([string for string in lattice.strings if lattice.isTwoInteriorLoop(string)])
+        return n
+    def getNonLoopStringCount(self):
+        n=0
+        for lattice in self.lattices:
+            if lattice is not None:
+                n+=len([string for string in lattice.strings if not lattice.isTwoInteriorLoop(string)])
+        return n
+    
+    def getLoopStringLength(self):
+        n=0
+        for lattice in self.lattices:
+            if lattice is not None:
+                for string in lattice.strings:
+                    if lattice.isTwoInteriorLoop(string):
+                        n+=lattice.getStringLength(string)
+        return n
+    def getNonLoopStringLength(self):
+        n=0
+        for lattice in self.lattices:
+            if lattice is not None:
+                for string in lattice.strings:
+                    if not lattice.isTwoInteriorLoop(string):
+                        n+=lattice.getStringLength(string)
+        return n
     def getMotionSummary(self):
         motionCounts={}
         i=0
@@ -602,8 +632,14 @@ class SFMotionSample:
             del motionCounts[key]
         
         motionCounts["numFrames"]=len([i for i in self.savedMotions if i is not None])
-        motionCounts["numStrings"]=self.getNumStrings()
-        motionCounts["numDimers"]=self.getNumDimers()
+        #motionCounts["numStrings"]=self.getNumStrings()
+        #motionCounts["numDimers"]=self.getNumDimers()
+
+        motionCounts["nonLoopStringLength"]=self.getNonLoopStringLength()
+        motionCounts["loopStringLength"]=self.getLoopStringLength()
+
+        motionCounts["nonLoopStrings"]=self.getNonLoopStringCount()
+        motionCounts["loopStrings"]=self.getLoopStringCount()
         return motionCounts
 
 
