@@ -383,6 +383,32 @@ class MomentGrid:
         
         return correlations
 
+    def getDeltaNuCorrelation(self, dist):
+        deltaSum=0
+        deltaTotal=0
+        nuSum=0
+        nuTotal=0
+
+        for moment in self.moments:
+            groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
+            group=[group for group in groups if abs(group[0]-dist)<self.distError][0][1]#all moments at that distance
+
+            for otherMoment in group:
+
+                    directionVector=(otherMoment.x-moment.x,otherMoment.y-moment.y)
+                    relativeAngle=round(restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))*180/math.pi,4)
+                    correlation=angleDotProductRad(otherMoment.angle,moment.angle)
+
+                    if abs(relativeAngle)<self.distError or abs(relativeAngle-180)<self.distError:
+                        deltaTotal+=1
+                        deltaSum+=correlation
+                    else:
+                        nuTotal+=1
+                        nuSum+=correlation
+
+        print(deltaTotal)
+        print(nuTotal)
+        return deltaSum/deltaTotal, nuSum/nuTotal
 
 
 
@@ -995,7 +1021,8 @@ if __name__=="__main__":
         RUN_CORRELATION_VS_OFFSET=False
         RUN_CORRELATION_VS_ANGLE=False
         RUN_RELATIVE_ANGLE_VS_DISTANCE=False
-        RUN_DIPOLE_CORRELATION=True
+        RUN_DIPOLE_CORRELATION=False
+        RUN_DELTA_NU_CORRELATION=True
 
 
         fileNames=sorted(getUserInputFiles())
@@ -1011,6 +1038,7 @@ if __name__=="__main__":
         dipoleCorrelation={}
         correlationVsAngle={}
         relativeAngleVsDistance={}
+        deltaNuCorrelation={}
 
         for fileName in fileNames:
             print(f"analyzing: {fileName}")
@@ -1029,8 +1057,13 @@ if __name__=="__main__":
             if RUN_DIPOLE_CORRELATION:
                 legMoments=lattice.getLegMomentGrid()
 
-
                 dipoleCorrelation[fileName]=legMoments.getCorrelationVsDistance(7)
+
+            if RUN_DELTA_NU_CORRELATION:
+                legMoments=lattice.getLegMomentGrid()
+                delta,nu=legMoments.getDeltaNuCorrelation(1)
+
+                deltaNuCorrelation[fileName]={"delta":delta,"nu":nu}
 
 
 
@@ -1131,6 +1164,14 @@ if __name__=="__main__":
                     f.write(f"{fileName}, ")
                     for value in values[1:]:
                         f.write(f"{value}, ")
+                    f.write("\n")
+
+        if RUN_DELTA_NU_CORRELATION:
+            with open(outFolder+"/deltaNuCorrelation.csv","w") as f:
+                f.write("file, delta, nu\n")
+                for fileName,data in deltaNuCorrelation.items():
+                    f.write(f"{fileName}, ")
+                    f.write(f"{data['delta']},{data['nu']}")
                     f.write("\n")
 
         if RUN_RELATIVE_ANGLE_VS_DISTANCE:
