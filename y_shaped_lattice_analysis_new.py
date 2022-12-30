@@ -1,3 +1,6 @@
+from distutils import dist
+from pickle import TRUE
+import re
 import cv2
 import matplotlib.pyplot as plt
 import math
@@ -43,8 +46,10 @@ def getFileData(file):
     
     file=file.replace("\r","")#some systems use \r\n, others use \n
     file=file.split("\n")
-    
-    file=[line.split(", ") for line in file]
+
+    #file=[line.split(", ") for line in file]
+    file=[[file[0]]]+[re.split('[(, )(,)]',line) for line in file[1:]]
+
     return file
 
 
@@ -383,7 +388,7 @@ class MomentGrid:
         
         return correlations
 
-    def getDeltaNuCorrelation(self, dist):
+    def getDeltaNuCorrelation(self, dist=1):
         deltaSum=0
         deltaTotal=0
         nuSum=0
@@ -393,22 +398,40 @@ class MomentGrid:
             groups=self.getGroupedMomentsByDistance(moment.x,moment.y)
             group=[group for group in groups if abs(group[0]-dist)<self.distError][0][1]#all moments at that distance
 
+
+            islandAngle=restrictAngleRad(moment.angle)
+
             for otherMoment in group:
 
                     directionVector=(otherMoment.x-moment.x,otherMoment.y-moment.y)
-                    relativeAngle=round(restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))*180/math.pi,4)
+                    relativeAngle=restrictAngleRad(math.atan2(directionVector[1],directionVector[0]))
                     correlation=angleDotProductRad(otherMoment.angle,moment.angle)
+                    
 
-                    if abs(relativeAngle)<self.distError or abs(relativeAngle-180)<self.distError:
+                    if abs(restrictAngleRad(relativeAngle-islandAngle)-np.pi/2)<self.distError or abs(restrictAngleRad(relativeAngle-islandAngle)-np.pi*3/2)<self.distError:
                         deltaTotal+=1
                         deltaSum+=correlation
                     else:
                         nuTotal+=1
                         nuSum+=correlation
 
-        print(deltaTotal)
-        print(nuTotal)
         return deltaSum/deltaTotal, nuSum/nuTotal
+
+    def getBetaToPhiCorrelation(self):
+        delta, nu=self.getDeltaNuCorrelation()
+        print(delta,nu)
+
+        distanceCorrelation=self.getCorrelationVsDistance(7)
+        alpha=distanceCorrelation[0]
+        beta=distanceCorrelation[1]
+        gamma=distanceCorrelation[2]
+        tau=distanceCorrelation[4]
+        eta=distanceCorrelation[5]
+        phi=distanceCorrelation[6]
+
+        print(distanceCorrelation)
+
+        return {"alpha":alpha,"beta":beta,"gamma":gamma,"delta":delta,"nu":nu,"tau":tau,"eta":eta,"phi":phi}
 
 
 
@@ -1022,7 +1045,8 @@ if __name__=="__main__":
         RUN_CORRELATION_VS_ANGLE=False
         RUN_RELATIVE_ANGLE_VS_DISTANCE=False
         RUN_DIPOLE_CORRELATION=False
-        RUN_DELTA_NU_CORRELATION=True
+        RUN_DELTA_NU_CORRELATION=False
+        RUN_BETA_TO_PHI_CORRELATION=True
 
 
         fileNames=sorted(getUserInputFiles())
@@ -1039,6 +1063,7 @@ if __name__=="__main__":
         correlationVsAngle={}
         relativeAngleVsDistance={}
         deltaNuCorrelation={}
+        betaToPhiCorrelation={}
 
         for fileName in fileNames:
             print(f"analyzing: {fileName}")
@@ -1066,7 +1091,8 @@ if __name__=="__main__":
                 deltaNuCorrelation[fileName]={"delta":delta,"nu":nu}
 
 
-
+            if RUN_BETA_TO_PHI_CORRELATION:
+                betaToPhiCorrelation[fileName]=lattice.getLegMomentGrid().getBetaToPhiCorrelation()
 
 
             if RUN_CORRELATION_VS_OFFSET:
@@ -1172,6 +1198,19 @@ if __name__=="__main__":
                 for fileName,data in deltaNuCorrelation.items():
                     f.write(f"{fileName}, ")
                     f.write(f"{data['delta']},{data['nu']}")
+                    f.write("\n")
+
+        if RUN_BETA_TO_PHI_CORRELATION:
+            names=["alpha","beta","gamma","delta","nu","tau","eta","phi"]
+
+            with open(outFolder+"/namedCorrelations.csv","w+") as f:
+                f.write(f"file, ")
+                for name in names:f.write(name+", ")
+                f.write("\n")
+                for fileName,data in betaToPhiCorrelation.items():
+                    f.write(f"{fileName}, ")
+                    for name in names:
+                        f.write(f"{data[name]}, ")
                     f.write("\n")
 
         if RUN_RELATIVE_ANGLE_VS_DISTANCE:

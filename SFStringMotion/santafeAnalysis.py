@@ -761,6 +761,7 @@ class SantaFeLattice:
         x, y = self.getXYFromRowCol(rowI,colI,image)
         spacingX,spacingY=self.getSpacingXSpacingY(image)
 
+
         #if it is an arrow cell
         if(cell.arrow is not None):
             right=(int(x+spacingX/4),y)
@@ -788,10 +789,14 @@ class SantaFeLattice:
                 image=cv2.arrowedLine(image,right,left,color,lineWidth,tipLength=tipLength)
             elif(cell.arrow=="right"):
                 image=cv2.arrowedLine(image,left,right,color,lineWidth,tipLength=tipLength)
+        #else:
+            #cv2.putText(image, str(self.getVertexCountType(rowI,colI)[1]), (x,y), cv2.FONT_HERSHEY_SIMPLEX,0.3, BLACK, 1, cv2.LINE_AA)
+        
         if(cell.dimer):
             cv2.circle(image,(x,y),2,RED,-1)
         if(cell.interiorCenter):
             cv2.circle(image,(x,y),2,BLUE,-1)
+            cv2.rectangle(image,(int(x-spacingX/4),int(y-spacingY/4)),(int(x+spacingX/4),int(y+spacingY/4)),BLUE,-1)
         if(cell.compositeSquareCenter):
             cv2.circle(image,(x,y),2,GREEN,-1)
         if(cell.center and not cell.interiorCenter):
@@ -991,6 +996,7 @@ class SantaFeLattice:
 
     #check if a cell at a given row,col is a dimer
     def isDimer(self, rowI,colI):
+
         
         islandCount, type = self.getVertexCountType(rowI,colI)
         return type>1#all non-type-1 verticies are dimers
@@ -1006,8 +1012,10 @@ class SantaFeLattice:
     def getVertexCountType(self,rowI,colI):
         vertexType=0;
         cell=self.getCell(rowI,colI)
+
         vertexPattern=self.getInOutPattern(rowI,colI)
         islandCount=self.countInOutArrows(rowI,colI)
+
 
         if islandCount>1 and cell.arrow is None:
             for type in self.vertexClasses[islandCount].keys():#check if the vertex pattern is in the given type
@@ -1022,6 +1030,7 @@ class SantaFeLattice:
         for (rowI, row) in enumerate(data):
             for(colI, cell) in enumerate(row):
                 cell.dimer=self.isDimer(rowI,colI)
+
     
     def countArrows(self):
         total=0
@@ -1055,7 +1064,7 @@ class SantaFeLattice:
         for (rowI, row) in enumerate(self.data):
             for (colI, cell) in enumerate(row):
                 if(cell.center and self.isInteriorCenter(rowI, colI)):
-                    if(self.getCell(rowI+2,colI).center and  self.isInteriorCenter(rowI+2, colI)):
+                    if(self.getCell(rowI+2,colI) and self.getCell(rowI+2,colI).center and  self.isInteriorCenter(rowI+2, colI)):
 
                         rowOff=(colI%16>=8)
                         colOff=((rowI+1)%16>=8) 
@@ -1204,6 +1213,9 @@ class SantaFeLattice:
             center=centers[i]
             relativeRow=center[0]-rowI
             relativeCol=center[1]-colI
+
+            if not top or not bottom or not left or not right:
+                continue
 
             #these are basically the hardcoded rules for how a string can connect through a vertex
             if(relativeRow>0 and relativeCol>0): #bottom right
@@ -1392,29 +1404,30 @@ if __name__=="__main__":
         parser.add_argument("file", type=str, help="Path to csv file")
         args=parser.parse_args()
 
+        
 
         try:
             file=open(args.file,newline="\n")
         except:
             raise Exception("Error with file")
-        lattice=SantaFeLattice(file)
+        lattice=SantaFeLattice(file,autoAlignCenters=True,removeEdgeStrings=False)
 
-        outString=args.file+", "
-        lattice.removeStringsNotConnectingInteriors()
-        outString+=""+str(len(lattice.strings)/lattice.numCompositeSquares())+", "
-        lattice.removeSmallStrings()
-        outString+=""+str(lattice.getStringCorrelation())+", "
-        outString+=""+str(lattice.getNearestNeighborStringCorrelation())+"\n"
+        # outString=args.file+", "
+        # lattice.removeStringsNotConnectingInteriors()
+        # #outString+=""+str(len(lattice.strings)/lattice.numCompositeSquares())+", "
+        # lattice.removeSmallStrings()
+        # outString+=""+str(lattice.getStringCorrelation())+", "
+        # outString+=""+str(lattice.getNearestNeighborStringCorrelation())+"\n"
 
-        with open("out.txt","a") as file:
-            file.write(outString)
+        # with open("out.txt","a") as file:
+        #     file.write(outString)
 
 
-        outputImage=np.zeros((1000,1000,3), np.uint8)
+        outputImage=np.zeros((800,800,3), np.uint8)
         outputImage[:,:]=(250,250,250)
         lattice.drawCells(outputImage)
-        lattice.drawStrings(outputImage)
-        lattice.drawStringTraces(outputImage)
+        lattice.drawStrings(outputImage, lineWidth=3)
+        #lattice.drawStringTraces(outputImage)
 
 
         cv2.imshow("window",outputImage)
